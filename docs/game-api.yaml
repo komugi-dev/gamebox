@@ -1,0 +1,111 @@
+asyncapi: 2.6.0
+info:
+  title: Gamebox Game API
+  version: 1.0.0
+  description: WebSocket API to stream game events.
+servers:
+  gamebox:
+    url: ws://localhost:8080/gamebox/v1
+    protocol: ws
+
+channels:
+  /game:
+    publish:
+      summary: Messages from clients to server
+      message:
+        oneOf:
+          - $ref: '#/components/messages/PlayMessage'
+    subscribe:
+      summary: Messages received by the clients (unsolicited from server)
+      message:
+        oneOf:
+          - $ref: '#/components/messages/WelcomeMessage'
+          - $ref: '#/components/messages/StateMessage'
+          - $ref: '#/components/messages/YourTurnMessage'
+
+components:
+  messages:
+    WelcomeMessage:
+      name: WelcomeMessage
+      title: Welcome and identity setup
+      summary: First message sent by the server when the WebSocket is successfully opened.
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [welcome]
+          player_guid:
+            type: string
+            description: Unique ID the client will use in every message to the server.
+        required:
+          - type
+          - player_guid
+
+    PlayMessage:
+      name: PlayMessage
+      title: Player move
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [play]
+          player_guid:
+            type: string
+          turn_id:
+            type: string
+            description: Unique ID associated with the turn, sent along with the YourTurn message.
+          play_choice:
+            type: object
+            description: Payload depending on the game logic.
+        required:
+          - type
+          - player_guid
+          - turn_id
+          - play_choice
+
+    StateMessage:
+      name: StateMessage
+      title: Game status
+      summary: Sent by the server after each move.
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [state]
+          player_guid:
+            type: string
+            description: The recipient. In case of hidden information, the game logic will filter.
+          game_state:
+            type: object
+            description: The game status the recipient can access to.
+        required:
+          - type
+          - player_guid
+          - game_state
+
+    YourTurnMessage:
+      name: YourTurnMessage
+      title: Move Request
+      summary: The server notifies a client it must play.
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [yourturn]
+          player_guid:
+            type: string
+            description: Unique ID associated with the client.
+          game_state:
+            type: object
+            description: Updated game status.
+          turn_id:
+            type: string
+            description: Unique ID associated with the turn.
+        required:
+          - type
+          - player_guid
+          - turn_id

@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: Gamebox Table API
+  version: 1.0.1
+  description: REST API for game table management, with support for creating a websocket for gameplay.
+servers:
+  - url: http://localhost:8080/gamebox/v1
+paths:
+  /tables:
+    post:
+      summary: Creates a new table
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_name:
+                  type: string
+                  description: The name of the game table other players can join.
+              required:
+                - table_name
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  table_guid:
+                    type: string
+    get:
+      summary: List tables
+      responses:
+        '200':
+          description: Returns a list of the available tables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    table_name:
+                      type: string
+                    table_guid:
+                      type: string
+
+  /tables/{table_guid}/join:
+    post:
+      summary: Join a table or rejoin in case of disconnection
+      description: |
+        If it's the first time joining, send just 'player_name'.
+        If it's a rejoin, send the 'player_guid'.
+        In both cases, the server returns a 'websocket_secret' valid once to open the WS connection.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_name:
+                  type: string
+                  description: Used only by new players
+                player_guid:
+                  type: string
+                  description: Used by players rejoining a table
+      responses:
+        '200':
+          description: Returns the secret ticket to open the WebSocket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  websocket_secret:
+                    type: string
+                    description: Include this in the querystring GET /game/join?secret=...
+
+  /tables/{table_guid}/quit:
+    post:
+      summary: Quit the table
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_guid:
+                  type: string
+              required:
+                - player_guid
+      responses:
+        '200':
+          description: Successfully exited.
+
+  /tables/{table_guid}/players:
+    get:
+      summary: List of the players on the table.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of the players names.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /tables/{table_guid}/start:
+    post:
+      summary: Start the game
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Game successfully started. The server will send "state" and "yourturn" messages via WebSocket.
+        '400':
+          description: The game cannot start.
