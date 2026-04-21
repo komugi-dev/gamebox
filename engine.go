@@ -12,8 +12,9 @@ import (
 
 // The Game Box Engine structure, container for turn based games
 type Engine struct {
-	name    string
-	factory GameFactory
+	name     string
+	factory  GameFactory
+	registry gameRegistry
 
 	// TODO: add internal state
 }
