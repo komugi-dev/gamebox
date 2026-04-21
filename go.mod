@@ -1,4 +1,4 @@
-module gamebox
+module github.com/komugi-dev/gamebox
 
 go 1.25.1
 
