@@ -2,6 +2,12 @@ module github.com/komugi-dev/gamebox
 
 go 1.25.1
 
-require github.com/sirupsen/logrus v1.9.4
+require (
+	github.com/gorilla/mux v1.8.1
+	github.com/sirupsen/logrus v1.9.4
+)
 
-require golang.org/x/sys v0.13.0 // indirect
+require (
+	github.com/stretchr/testify v1.11.1 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+)

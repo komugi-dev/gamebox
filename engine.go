@@ -1,6 +1,14 @@
 package gamebox
 
-import log "github.com/sirupsen/logrus"
+import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 // The Game Box Engine structure, container for turn based games
 type Engine struct {
@@ -23,13 +31,32 @@ func NewEngine(name string, f GameFactory) *Engine {
 	}
 }
 
-// run the
-func (e *Engine) Run(addr string) error {
+// run the engine
+func (e *Engine) Run(port int) error {
 	log.Infof("Gamebox for %s", e.name)
-	// init the REST router
-	// add REST handlers
-	// add websocket handlers
-	// start REST service
-	log.Infof("Gamebox server listening on: %s", addr)
+
+	var err error
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	srvConf := serverConf{
+		port:              port,
+		readHeaderTimeout: 5 * time.Second,
+		readTimeout:       15 * time.Second,
+		writeTimeout:      35 * time.Second,
+		idleTimeout:       60 * time.Second,
+	}
+	var srv *server
+	if srv, err = NewServer(srvConf); err != nil {
+		log.Fatalf("Server initialization failed: %v", err)
+	}
+
+	log.Infof("Gamebox server listening on: %v", srvConf.port)
+
+	if err = srv.Run(ctx); err != nil {
+		log.Fatalf("Application error: %v", err)
+	}
+
 	return nil
 }
