@@ -50,11 +50,9 @@ paths:
 
   /tables/{table_guid}/join:
     post:
-      summary: Join a table or rejoin in case of disconnection
+      summary: Join a table
       description: |
-        If it's the first time joining, send just 'player_name'.
-        If it's a rejoin, send the 'player_guid'.
-        In both cases, the server returns a 'websocket_secret' valid once to open the WS connection.
+        The player wants to join a table, it sends the 'player_name' and receive a 'websocket_secret' valid once to open the WS connection.
       parameters:
         - name: table_guid
           in: path
@@ -62,7 +60,7 @@ paths:
           schema:
             type: string
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
@@ -71,9 +69,8 @@ paths:
                 player_name:
                   type: string
                   description: Used only by new players
-                player_guid:
-                  type: string
-                  description: Used by players rejoining a table
+              required:
+                - player_name
       responses:
         '200':
           description: Returns the secret ticket to open the WebSocket.
@@ -85,6 +82,45 @@ paths:
                   websocket_secret:
                     type: string
                     description: Include this in the querystring GET /game/join?secret=...
+
+
+  /tables/{table_guid}/rejoin:
+    post:
+      summary: Rejoin a table
+      description: |
+        The player wants to reconnect to a websocket that is not responding.
+        As a payload, it send the 'player_guid' received after joining the table.
+        The server returns a 'websocket_secret' valid once to open the WS connection.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_guid:
+                  type: string
+                  description: The guid returned by the join request.
+              required:
+                - player_guid
+      responses:
+        '200':
+          description: Returns the secret ticket to open the WebSocket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  websocket_secret:
+                    type: string
+                    description: Include this in the querystring GET /game/join?secret=...
+
 
   /tables/{table_guid}/quit:
     post:
@@ -107,7 +143,7 @@ paths:
               required:
                 - player_guid
       responses:
-        '200':
+        '204':
           description: Successfully exited.
 
   /tables/{table_guid}/players:
@@ -139,7 +175,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Game successfully started. The server will send "state" and "yourturn" messages via WebSocket.
         '400':
           description: The game cannot start.

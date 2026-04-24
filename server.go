@@ -27,12 +27,14 @@ type server struct {
 	httpServer *http.Server
 }
 
-func NewServer(c serverConf) (*server, error) {
+func newServer(c serverConf, registry *gameRegistry) (*server, error) {
 	r := mux.NewRouter()
 
-	api := r.PathPrefix(apiPrefix).Subrouter()
+	rPath := r.PathPrefix(apiPrefix).Subrouter()
 
-	registerAPIRoutes(api)
+	api := &API{registry: registry}
+
+	registerAPIRoutes(rPath, api)
 
 	return &server{
 		conf: c,
@@ -47,8 +49,8 @@ func NewServer(c serverConf) (*server, error) {
 	}, nil
 }
 
-// Run starts the HTTP server and handles graceful shutdown
-func (s *server) Run(ctx context.Context) error {
+// run starts the HTTP server and handles graceful shutdown
+func (s *server) run(ctx context.Context) error {
 	serverErrors := make(chan error, 1)
 
 	go func() {

@@ -12,29 +12,29 @@ import (
 
 // The Game Box Engine structure, container for turn based games
 type Engine struct {
-	name     string
-	factory  GameFactory
-	registry gameRegistry
+	Name     string
+	registry *gameRegistry
 
 	// TODO: add internal state
 }
 
 // Factory to create the rules/logic object for the specific game
-// Game implementation must provide a factory to create a new engine
+// Game implementation must provide a factory to create a new registry
 type GameFactory func() GameRules
 
 // Create a new engine based on a set of rules
 func NewEngine(name string, f GameFactory) *Engine {
 	log.Debugf("creating new engine for %s", name)
+	r := newGameRegistry(f)
 	return &Engine{
-		name:    name,
-		factory: f,
+		Name:     name,
+		registry: r,
 	}
 }
 
 // run the engine
 func (e *Engine) Run(port int) error {
-	log.Infof("Gamebox for %s", e.name)
+	log.Infof("Gamebox for %s", e.Name)
 
 	var err error
 
@@ -48,14 +48,15 @@ func (e *Engine) Run(port int) error {
 		writeTimeout:      35 * time.Second,
 		idleTimeout:       60 * time.Second,
 	}
+
 	var srv *server
-	if srv, err = NewServer(srvConf); err != nil {
+	if srv, err = newServer(srvConf, e.registry); err != nil {
 		log.Fatalf("Server initialization failed: %v", err)
 	}
 
 	log.Infof("Gamebox server listening on: %v", srvConf.port)
 
-	if err = srv.Run(ctx); err != nil {
+	if err = srv.run(ctx); err != nil {
 		log.Fatalf("Application error: %v", err)
 	}
 
