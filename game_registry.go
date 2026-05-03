@@ -1,10 +1,17 @@
 package gamebox
 
 import (
+	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/beevik/guid"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	TableNotFound  = "table not found"
+	PlayerNotFound = "player not found"
 )
 
 func getGUID() string {
@@ -15,6 +22,8 @@ type table struct {
 	TableName string `json:"table_name"`
 	TableGUID string `json:"table_guid"`
 	rules     GameRules
+	players   map[string]struct{}
+	msgs      chan json.RawMessage
 }
 
 type gameRegistry struct {
@@ -31,15 +40,34 @@ func newGameRegistry(f GameFactory) *gameRegistry {
 }
 
 func (g *gameRegistry) createTable(tableName string) string {
-	// TODO
-	log.Debugf("creating table %v", tableName)
-	return ""
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	log.Infof("creating table %v", tableName)
+	t := table{
+		TableName: tableName,
+		TableGUID: guid.NewString(),
+		rules:     g.factory,
+		players:   make(map[string]struct{}),
+		msgs:      make(chan json.RawMessage),
+	}
+	log.Debugf("%+v", t)
+	g.registry[t.TableGUID] = &t
+
+	return t.TableGUID
 }
 
 func (g *gameRegistry) listTables() []table {
-	// TODO
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	log.Debugf("listing tables")
-	return []table{}
+	ret := []table{}
+	for _, t := range g.registry {
+		ret = append(ret, *t)
+	}
+
+	return ret
 }
 
 func (g *gameRegistry) joinTable(tableGUID string, playerName string) (wsSecret string, err error) {
@@ -57,12 +85,40 @@ func (g *gameRegistry) rejoinTable(tableGUID string, playerGUID string) (wsSecre
 }
 
 func (g *gameRegistry) quitTable(tableGUID string, playerGUID string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	t, ok := g.registry[tableGUID]
+	if !ok {
+		return errors.New(TableNotFound)
+	}
+
+	_, ok = t.players[playerGUID]
+	if !ok {
+		return errors.New(PlayerNotFound)
+	}
+
+	delete(t.players, playerGUID)
+
 	return nil
 }
 
 func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
-	// TODO
-	return []string{}, nil
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	ret := []string{}
+
+	t, ok := g.registry[tableGUID]
+	if !ok {
+		return ret, errors.New(TableNotFound)
+	}
+
+	for k := range t.players {
+		ret = append(ret, k)
+	}
+
+	return ret, nil
 }
 
 func (g *gameRegistry) startTable(tableGUID string) error {
