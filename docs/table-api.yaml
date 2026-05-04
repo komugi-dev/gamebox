@@ -179,3 +179,23 @@ paths:
           description: Game successfully started. The server will send "state" and "yourturn" messages via WebSocket.
         '400':
           description: The game cannot start.
+
+  /ws:
+    get:
+      summary: Open the WebSocket connection
+      description: |
+        Upgrades the HTTP connection to a WebSocket protocol.
+        Requires a valid 'secret' ticket obtained via POST /join or POST /rejoin.
+        The endpoint does not return a JSON body, but upgrades the connection and starts the Game API message flow.
+      parameters:
+        - name: secret
+          in: query
+          required: true
+          description: The one-time ticket to authorize the connection.
+          schema:
+            type: string
+      responses:
+        '101':
+          description: Switching Protocols. WebSocket successfully opened.
+        '401':
+          description: Unauthorized. The secret is invalid, missing, or already used.
