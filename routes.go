@@ -20,4 +20,5 @@ func registerAPIRoutes(r *mux.Router, api *API) {
 	r.HandleFunc("/tables/{table_guid}/quit", api.quitTableHandler()).Methods(http.MethodPost)
 	r.HandleFunc("/tables/{table_guid}/players", api.listPlayersHandler()).Methods(http.MethodGet)
 	r.HandleFunc("/tables/{table_guid}/start", api.startTableHandler()).Methods(http.MethodPost)
+	r.HandleFunc("/ws", api.wsUpgradeHandler()).Methods(http.MethodGet)
 }

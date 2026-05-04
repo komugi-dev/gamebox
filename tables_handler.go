@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 )
 
 // group the handlers
@@ -198,5 +199,21 @@ func (api *API) startTableHandler() http.HandlerFunc {
 
 		// response
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (api *API) wsUpgradeHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		secret := vars["secret"]
+		guid, err := api.registry.joinConfirm(secret)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		log.Debugf("ws for player %v", guid)
+
+		// TODO: ws upgrade
+
 	}
 }
