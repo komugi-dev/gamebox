@@ -20,8 +20,10 @@ func getGUID() string {
 }
 
 type player struct {
-	name string
-	guid string
+	name      string
+	guid      string
+	tableGUID string
+	client    *client
 }
 
 type joinTicket struct {
@@ -93,8 +95,9 @@ func (g *gameRegistry) joinTable(tableGUID string, playerName string) (wsSecret 
 	}
 
 	p := player{
-		name: playerName,
-		guid: getGUID(),
+		name:      playerName,
+		guid:      getGUID(),
+		tableGUID: tableGUID,
 	}
 	log.Infof("player %+v joining game %v", p, tableGUID)
 
@@ -116,13 +119,13 @@ func (g *gameRegistry) rejoinTable(tableGUID string, playerGUID string) (wsSecre
 	return
 }
 
-func (g *gameRegistry) joinConfirm(secret string) (playerGUID string, err error) {
+func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	t, ok := g.pendingTickets[secret]
 	if !ok {
-		return "", errors.New(TicketNotFound)
+		return joinTicket{}, errors.New(TicketNotFound)
 	}
 
 	// remove the ticket nevertheless
@@ -131,30 +134,44 @@ func (g *gameRegistry) joinConfirm(secret string) (playerGUID string, err error)
 	// check the table exists
 	_, ok = g.registry[t.tableGUID]
 	if !ok {
-		return "", errors.New(TableNotFound)
+		return joinTicket{}, errors.New(TableNotFound)
 	}
 
-	// add the player
-	g.registry[t.tableGUID].players[t.player.guid] = t.player
-
-	return t.player.guid, nil
+	return t, nil
 }
 
-func (g *gameRegistry) quitTable(tableGUID string, playerGUID string) error {
+func (g *gameRegistry) seatPlayer(p player, c *client) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	t, ok := g.registry[tableGUID]
+	// check the table first
+	table, ok := g.registry[p.tableGUID]
 	if !ok {
 		return errors.New(TableNotFound)
 	}
 
-	_, ok = t.players[playerGUID]
+	// assign the communication client
+	p.client = c
+	table.players[p.guid] = p
+
+	return nil
+}
+
+func (g *gameRegistry) quitTable(p player) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	t, ok := g.registry[p.tableGUID]
+	if !ok {
+		return errors.New(TableNotFound)
+	}
+
+	_, ok = t.players[p.guid]
 	if !ok {
 		return errors.New(PlayerNotFound)
 	}
 
-	delete(t.players, playerGUID)
+	delete(t.players, p.guid)
 
 	return nil
 }

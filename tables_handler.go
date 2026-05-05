@@ -5,12 +5,19 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 )
 
 // group the handlers
 type API struct {
 	registry *gameRegistry
+}
+
+func newAPI(registry *gameRegistry) *API {
+	return &API{
+		registry: registry,
+	}
 }
 
 type createTableRequest struct {
@@ -154,7 +161,7 @@ func (api *API) quitTableHandler() http.HandlerFunc {
 		}
 
 		// quit
-		err := api.registry.quitTable(tableGUID, req.PlayerGUID)
+		err := api.registry.quitTable(player{tableGUID: tableGUID, guid: req.PlayerGUID})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -202,18 +209,42 @@ func (api *API) startTableHandler() http.HandlerFunc {
 	}
 }
 
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
 func (api *API) wsUpgradeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		secret := vars["secret"]
-		guid, err := api.registry.joinConfirm(secret)
+		secret := r.URL.Query().Get("secret")
+		ticket, err := api.registry.consumeTicket(secret)
 		if err != nil {
+			log.Errorf("join confirm failed; %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		log.Debugf("ws for player %v", guid)
+		log.Debugf("ws for ticket: %+v", ticket)
 
-		// TODO: ws upgrade
+		// ws upgrade
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Errorf("web socket upgrade failed; %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
+		// run blocks until the web socket is alive
+		client := newClient(conn, ticket.player.guid)
+		err = api.registry.seatPlayer(ticket.player, client)
+		if err != nil {
+			conn.Close()
+			log.Errorf("seat player failed; %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		client.run()
+
+		api.registry.quitTable(ticket.player)
 	}
 }

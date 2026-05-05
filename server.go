@@ -32,7 +32,7 @@ func newServer(c serverConf, registry *gameRegistry) (*server, error) {
 
 	rPath := r.PathPrefix(apiPrefix).Subrouter()
 
-	api := &API{registry: registry}
+	api := newAPI(registry)
 
 	registerAPIRoutes(rPath, api)
 
