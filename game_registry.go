@@ -113,10 +113,30 @@ func (g *gameRegistry) joinTable(tableGUID string, playerName string) (wsSecret 
 }
 
 func (g *gameRegistry) rejoinTable(tableGUID string, playerGUID string) (wsSecret string, err error) {
-	// TODO
-	wsSecret = getGUID()
-	err = nil
-	return
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	t, ok := g.registry[tableGUID]
+	if !ok {
+		return "", errors.New(TableNotFound)
+	}
+
+	p, ok := t.players[playerGUID]
+	if !ok {
+		return "", errors.New(PlayerNotFound)
+	}
+
+	log.Infof("player %+v rejoining game %v", p, tableGUID)
+
+	ticket := joinTicket{
+		secret:    getGUID(),
+		tableGUID: tableGUID,
+		player:    p,
+	}
+	g.pendingTickets[ticket.secret] = ticket
+	log.Debugf("ticket %+v", ticket)
+
+	return ticket.secret, nil
 }
 
 func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
@@ -148,6 +168,12 @@ func (g *gameRegistry) seatPlayer(p player, c *client) error {
 	table, ok := g.registry[p.tableGUID]
 	if !ok {
 		return errors.New(TableNotFound)
+	}
+
+	// in case this is a rejoin, close the existing connection
+	if oldPlayer, exists := table.players[p.guid]; exists && oldPlayer.client != nil {
+		log.Infof("kicking old connection for player %s", p.guid)
+		oldPlayer.client.conn.Close()
 	}
 
 	// assign the communication client
