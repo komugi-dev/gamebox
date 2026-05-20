@@ -32,19 +32,12 @@ type joinTicket struct {
 	player    player
 }
 
-type table struct {
-	TableName string `json:"table_name"`
-	TableGUID string `json:"table_guid"`
-	rules     GameRules
-	players   map[string]player
-	msgs      chan json.RawMessage
-}
-
 type gameRegistry struct {
 	mu             sync.RWMutex
 	registry       map[string]*table     // game tables available
 	pendingTickets map[string]joinTicket // join requests
-	factory        GameFactory
+	factory        GameFactory           // factory of new games
+	wg             sync.WaitGroup        // games graceful shutdown
 }
 
 func newGameRegistry(f GameFactory) *gameRegistry {
@@ -222,5 +215,12 @@ func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
 
 func (g *gameRegistry) startTable(tableGUID string) error {
 	// TODO
+	t, ok := g.registry[tableGUID]
+	if !ok {
+		log.Errorf("table %v not fonud; aborting", tableGUID)
+		return errors.New(TableNotFound)
+	}
+
+	go t.startLoop()
 	return nil
 }

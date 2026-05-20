@@ -5,12 +5,17 @@ import "github.com/gorilla/websocket"
 type client struct {
 	conn       *websocket.Conn
 	playerGUID string
+	messages   chan ClientMsg
+}
+
+type ClientMsg struct {
 }
 
 func newClient(wsConn *websocket.Conn, playerGUID string) *client {
 	return &client{
 		conn:       wsConn,
 		playerGUID: playerGUID,
+		messages:   make(chan ClientMsg),
 	}
 }
 
