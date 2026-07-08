@@ -1,8 +1,8 @@
 package gamebox
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/beevik/guid"
@@ -13,6 +13,7 @@ const (
 	TableNotFound  = "table not found"
 	PlayerNotFound = "player not found"
 	TicketNotFound = "ticket not found"
+	StartError     = "game start error; table guid: %v; err: %v"
 )
 
 func getGUID() string {
@@ -42,8 +43,9 @@ type gameRegistry struct {
 
 func newGameRegistry(f GameFactory) *gameRegistry {
 	return &gameRegistry{
-		registry: make(map[string]*table),
-		factory:  f,
+		registry:       make(map[string]*table),
+		pendingTickets: make(map[string]joinTicket),
+		factory:        f,
 	}
 }
 
@@ -57,7 +59,7 @@ func (g *gameRegistry) createTable(tableName string) string {
 		TableGUID: guid.NewString(),
 		rules:     g.factory(),
 		players:   make(map[string]player),
-		msgs:      make(chan json.RawMessage),
+		inbox:     make(chan msgPlayer),
 	}
 	log.Debugf("%+v", t)
 	g.registry[t.TableGUID] = &t
@@ -153,27 +155,31 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 	return t, nil
 }
 
-func (g *gameRegistry) seatPlayer(p player, c *client) error {
+func (g *gameRegistry) seatPlayer(p player, c *client) (chan msgPlayer, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// check the table first
 	table, ok := g.registry[p.tableGUID]
 	if !ok {
-		return errors.New(TableNotFound)
+		return nil, errors.New(TableNotFound)
 	}
 
+	// TODO : check
+
 	// in case this is a rejoin, close the existing connection
+	oldPlayer := setPlayer(p)
+
 	if oldPlayer, exists := table.players[p.guid]; exists && oldPlayer.client != nil {
-		log.Infof("kicking old connection for player %s", p.guid)
-		oldPlayer.client.conn.Close()
+		log.Warningf("kicking old connection for player %s", p.guid)
+		_ = oldPlayer.client.conn.Close()
 	}
 
 	// assign the communication client
 	p.client = c
 	table.players[p.guid] = p
 
-	return nil
+	return table.inbox, nil
 }
 
 func (g *gameRegistry) quitTable(p player) error {
@@ -190,9 +196,17 @@ func (g *gameRegistry) quitTable(p player) error {
 		return errors.New(PlayerNotFound)
 	}
 
-	delete(t.players, p.guid)
+	// player
+	t.deletePlayer(p.guid)
+
+	// clean up
+	p.client.dispose()
 
 	return nil
+}
+
+func (g *gameRegistry) disconnectPlayer(playerGUID string, tableGUID string) {
+	// TODO
 }
 
 func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
@@ -214,13 +228,35 @@ func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
 }
 
 func (g *gameRegistry) startTable(tableGUID string) error {
-	// TODO
+
+	g.mu.RLock()
 	t, ok := g.registry[tableGUID]
+	g.mu.RUnlock()
 	if !ok {
 		log.Errorf("table %v not fonud; aborting", tableGUID)
 		return errors.New(TableNotFound)
 	}
 
-	go t.startLoop()
+	log.Infof("Table %s starting...", t.TableGUID)
+
+	// init the game
+	updatedStatus, nextPlayers, err := t.rules.Start()
+	if err != nil {
+		errMsg := fmt.Sprintf(StartError, t.TableGUID, err)
+		log.Error(errMsg)
+		return errors.New(errMsg)
+	}
+
+	go func() {
+		t.startLoop(updatedStatus, nextPlayers)
+
+		// the game is done, clean up the table
+		t.Dispose()
+
+		g.mu.Lock()
+		delete(g.registry, tableGUID)
+		g.mu.Unlock()
+
+	}()
 	return nil
 }

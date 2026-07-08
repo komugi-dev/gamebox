@@ -2,6 +2,7 @@ package gamebox
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -235,16 +236,20 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 
 		// run blocks until the web socket is alive
 		client := newClient(conn, ticket.player.guid)
-		err = api.registry.seatPlayer(ticket.player, client)
+		tableInbox, err := api.registry.seatPlayer(ticket.player, client)
 		if err != nil {
+			seatErr := fmt.Errorf("seat player failed; %v", err)
+			log.Error(seatErr)
+			closeMsg := websocket.FormatCloseMessage(websocket.CloseInternalServerErr, seatErr.Error())
+			conn.WriteMessage(websocket.CloseMessage, closeMsg)
 			conn.Close()
-			log.Errorf("seat player failed; %v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		client.run()
-
-		api.registry.quitTable(ticket.player)
+		err = client.run(tableInbox)
+		// the player was probably disconnected
+		if err != nil {
+			api.registry.disconnectPlayer(ticket.player.guid, ticket.tableGUID)
+		}
 	}
 }

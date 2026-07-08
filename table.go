@@ -7,61 +7,108 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type msgPlayer struct {
+	playerGUID string
+	turnGUID   string
+	payload    json.RawMessage
+}
+
 type table struct {
 	TableName string `json:"table_name"`
 	TableGUID string `json:"table_guid"`
 	rules     GameRules
 	players   map[string]player
-	msgs      chan json.RawMessage
-	wg        *sync.WaitGroup
+	inbox     chan msgPlayer // incoming messages from players
+	mu        sync.RWMutex
 }
 
-func (t *table) startLoop() {
+func (t *table) broadcastState(state map[string]json.RawMessage) error {
+	// TODO
+	return nil
+}
+
+func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
+	// TODO
+	return nil
+}
+
+func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
+	// TODO
+	return nil
+}
+
+func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
+	var err error
+	if len(updatedStatus) > 0 {
+		err = t.broadcastState(updatedStatus)
+		if err != nil {
+			log.Errorf("broadcast failed; table:%v; err:%v", t.TableGUID, err)
+		}
+	}
+	for _, nextPlayerGUID := range nextPlayers {
+		err = t.sendYourTurn(nextPlayerGUID, updatedStatus[nextPlayerGUID])
+		if err != nil {
+			log.Errorf("send your turn failed; table:%v; player:%v; err:%v", t.TableGUID, nextPlayerGUID, err)
+		}
+	}
+}
+
+// TODO : check
+func (t *table) setPlayer(p player) (clientToClose *client) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if oldPlayer, exists := t.players[p.guid]; exists && oldPlayer.client != nil {
+		clientToClose = oldPlayer.client
+	}
+	t.players[p.guid] = p
+	return clientToClose
+}
+
+func (t *table) deletePlayer(playerGUID string) {
+	t.mu.Lock()
+	delete(t.players, playerGUID)
+	t.mu.Unlock()
+}
+
+func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
 	log.Infof("Table %s starting...", t.TableGUID)
 
-	// init the game
-	initialState, err := t.rules.Start()
-	if err != nil {
-		log.Errorf("Failed to start game. Guid: %v, err: %v", t.TableGUID, err)
-		return
-	}
+	t.updatePlayers(updatedStatus, nextPlayers)
 
-	// send information to the right channels
-	t.broadcastState(initialState)
-
-	// infinite loop
+	// event loop
 	for {
-		// ask the rules who's next
-		nextPlayerGUID, err := t.rules.NextPlayer()
-		if err != nil {
-			log.Errorf("Engine error (guid: %v): %v", t.TableGUID, err)
-			return
+		msg, ok := <-t.inbox
+		if !ok {
+			log.Warningf("no more msg; table: %v", t.TableGUID)
+			break
 		}
 
-		// listen for messages
-		select {
-		case msg := <-t.msgs:
+		// player sent a valid message
+		updatedStatus, nextPlayers, isGameOver, err := t.rules.Play(msg.playerGUID, msg.payload)
+		if err != nil {
+			t.sendErrorTo(msg.playerGUID, err.Error())
+			continue
+		}
 
-			// security check
-			if msg.playerGUID != nextPlayerGUID {
-				t.sendErrorTo(msg.playerGUID, "Not your turn!")
-				continue
-			}
+		t.updatePlayers(updatedStatus, nextPlayers)
 
-			// play
-			newState, isGameOver, err := t.rules.Play(nextPlayerGUID, msg.payload)
-			if err != nil {
-				t.sendErrorTo(msg.playerGUID, err.Error())
-				continue
-			}
-
-			// update new state
-			t.broadcastState(newState)
-
-			if isGameOver {
-				log.Infof("Game Over at table %s", t.TableGUID)
-				return
-			}
+		if isGameOver {
+			log.Infof("Game Over at table %s", t.TableGUID)
+			break
 		}
 	}
+
+	// players clean up
+	t.mu.Lock()
+	for _, p := range t.players {
+		if p.client != nil {
+			close(p.client.outbox)
+		}
+	}
+	t.mu.Unlock()
+}
+
+func (t *table) Dispose() {
+	close(t.inbox)
 }
