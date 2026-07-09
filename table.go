@@ -22,7 +22,8 @@ type table struct {
 	summary tableSummary
 	rules   GameRules
 	players map[string]player
-	inbox   chan msgPlayer // incoming messages from players
+	inbox   chan msgPlayer            // incoming messages from players
+	outbox  map[string]chan msgPlayer // outgoing messages fo players
 	mu      sync.RWMutex
 }
 
@@ -71,16 +72,25 @@ func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlay
 	}
 }
 
-// TODO : check
-func (t *table) setPlayer(p player) (clientToClose *client) {
+// setPlayer() checks if the player is rejoining, then creates a channel to handle outgoing messages
+// clientToClose is not nil, close it
+func (t *table) setPlayer(p player) (playerOutbox <-chan msgPlayer, clientToClose *client) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if oldPlayer, exists := t.players[p.guid]; exists && oldPlayer.client != nil {
 		clientToClose = oldPlayer.client
 	}
+
+	playerChan, exists := t.outbox[p.guid]
+	if !exists {
+		playerChan = make(chan msgPlayer)
+		t.outbox[p.guid] = playerChan
+	}
+	playerOutbox = playerChan
+
 	t.players[p.guid] = p
-	return clientToClose
+	return
 }
 
 func (t *table) deletePlayer(playerGUID string) {

@@ -62,6 +62,7 @@ func (g *gameRegistry) createTable(tableName string) string {
 		rules:   g.factory(),
 		players: make(map[string]player),
 		inbox:   make(chan msgPlayer),
+		outbox:  make(map[string]chan msgPlayer),
 	}
 	log.Debugf("%+v", t.summary)
 	g.registry[t.summary.TableGUID] = &t
@@ -157,14 +158,15 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 	return t, nil
 }
 
-func (g *gameRegistry) seatPlayer(p player, c *client) (chan msgPlayer, error) {
+func (g *gameRegistry) seatPlayer(p player, c *client) (tableInbox chan<- msgPlayer, playerOutbox <-chan msgPlayer, err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// check the table first
 	table, ok := g.registry[p.tableGUID]
 	if !ok {
-		return nil, errors.New(TableNotFound)
+		err = errors.New(TableNotFound)
+		return nil, nil, err
 	}
 
 	// TODO : check

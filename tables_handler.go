@@ -236,7 +236,7 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 
 		// run blocks until the web socket is alive
 		client := newClient(conn, ticket.player.guid)
-		tableInbox, err := api.registry.seatPlayer(ticket.player, client)
+		tableInbox, playerOutbox, err := api.registry.seatPlayer(ticket.player, client)
 		if err != nil {
 			seatErr := fmt.Errorf("seat player failed; %v", err)
 			log.Error(seatErr)
@@ -246,7 +246,7 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 			return
 		}
 
-		err = client.run(tableInbox)
+		err = client.run(r.Context(), tableInbox, playerOutbox)
 		// the player was probably disconnected
 		if err != nil {
 			api.registry.disconnectPlayer(ticket.player.guid, ticket.tableGUID)
