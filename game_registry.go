@@ -55,26 +55,28 @@ func (g *gameRegistry) createTable(tableName string) string {
 
 	log.Infof("creating table %v", tableName)
 	t := table{
-		TableName: tableName,
-		TableGUID: guid.NewString(),
-		rules:     g.factory(),
-		players:   make(map[string]player),
-		inbox:     make(chan msgPlayer),
+		summary: tableSummary{
+			TableName: tableName,
+			TableGUID: guid.NewString(),
+		},
+		rules:   g.factory(),
+		players: make(map[string]player),
+		inbox:   make(chan msgPlayer),
 	}
-	log.Debugf("%+v", t)
-	g.registry[t.TableGUID] = &t
+	log.Debugf("%+v", t.summary)
+	g.registry[t.summary.TableGUID] = &t
 
-	return t.TableGUID
+	return t.summary.TableGUID
 }
 
-func (g *gameRegistry) listTables() []table {
+func (g *gameRegistry) listTables() []tableSummary {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	log.Debugf("listing tables")
-	ret := []table{}
+	ret := []tableSummary{}
 	for _, t := range g.registry {
-		ret = append(ret, *t)
+		ret = append(ret, t.summary)
 	}
 
 	return ret
@@ -237,12 +239,12 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 		return errors.New(TableNotFound)
 	}
 
-	log.Infof("Table %s starting...", t.TableGUID)
+	log.Infof("Table %s starting...", t.summary.TableGUID)
 
 	// init the game
 	updatedStatus, nextPlayers, err := t.rules.Start()
 	if err != nil {
-		errMsg := fmt.Sprintf(StartError, t.TableGUID, err)
+		errMsg := fmt.Sprintf(StartError, t.summary.TableGUID, err)
 		log.Error(errMsg)
 		return errors.New(errMsg)
 	}

@@ -50,7 +50,7 @@ func (api *API) createTableHandler() http.HandlerFunc {
 }
 
 type listTableResponse struct {
-	Tables []table
+	Tables []tableSummary
 }
 
 func (api *API) listTableHandler() http.HandlerFunc {

@@ -13,13 +13,28 @@ type msgPlayer struct {
 	payload    json.RawMessage
 }
 
-type table struct {
+type tableSummary struct {
 	TableName string `json:"table_name"`
 	TableGUID string `json:"table_guid"`
-	rules     GameRules
-	players   map[string]player
-	inbox     chan msgPlayer // incoming messages from players
-	mu        sync.RWMutex
+}
+
+type table struct {
+	summary tableSummary
+	rules   GameRules
+	players map[string]player
+	inbox   chan msgPlayer // incoming messages from players
+	mu      sync.RWMutex
+}
+
+func (t *table) getSummary() tableSummary {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	log.Debugf("listing tables")
+	return tableSummary{
+		TableName: t.summary.TableName,
+		TableGUID: t.summary.TableGUID,
+	}
 }
 
 func (t *table) broadcastState(state map[string]json.RawMessage) error {
@@ -38,17 +53,20 @@ func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
 }
 
 func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	var err error
 	if len(updatedStatus) > 0 {
 		err = t.broadcastState(updatedStatus)
 		if err != nil {
-			log.Errorf("broadcast failed; table:%v; err:%v", t.TableGUID, err)
+			log.Errorf("broadcast failed; table:%v; err:%v", t.summary.TableGUID, err)
 		}
 	}
 	for _, nextPlayerGUID := range nextPlayers {
 		err = t.sendYourTurn(nextPlayerGUID, updatedStatus[nextPlayerGUID])
 		if err != nil {
-			log.Errorf("send your turn failed; table:%v; player:%v; err:%v", t.TableGUID, nextPlayerGUID, err)
+			log.Errorf("send your turn failed; table:%v; player:%v; err:%v", t.summary.TableGUID, nextPlayerGUID, err)
 		}
 	}
 }
@@ -72,7 +90,7 @@ func (t *table) deletePlayer(playerGUID string) {
 }
 
 func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
-	log.Infof("Table %s starting...", t.TableGUID)
+	log.Infof("Table %s starting...", t.summary.TableGUID)
 
 	t.updatePlayers(updatedStatus, nextPlayers)
 
@@ -80,7 +98,7 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 	for {
 		msg, ok := <-t.inbox
 		if !ok {
-			log.Warningf("no more msg; table: %v", t.TableGUID)
+			log.Warningf("no more msg; table: %v", t.summary.TableGUID)
 			break
 		}
 
@@ -94,7 +112,7 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 		t.updatePlayers(updatedStatus, nextPlayers)
 
 		if isGameOver {
-			log.Infof("Game Over at table %s", t.TableGUID)
+			log.Infof("Game Over at table %s", t.summary.TableGUID)
 			break
 		}
 	}
