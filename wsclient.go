@@ -10,7 +10,6 @@ import (
 type client struct {
 	conn       *websocket.Conn
 	playerGUID string
-	outbox     chan msgPlayer // app -> websocket
 }
 
 type ClientMsg struct {
@@ -20,7 +19,6 @@ func newClient(wsConn *websocket.Conn, playerGUID string) *client {
 	return &client{
 		conn:       wsConn,
 		playerGUID: playerGUID,
-		outbox:     make(chan msgPlayer, 256),
 	}
 }
 
@@ -78,11 +76,9 @@ func (c *client) run(ctx context.Context, inbox chan<- msgPlayer, outbox <-chan 
 	defer cancel()
 
 	go func() {
-		select {
-		case <-ctx.Done():
-			log.Infof("Context done, forcing close for client %s", c.playerGUID)
-			c.conn.Close()
-		}
+		<-ctx.Done()
+		log.Infof("Context done, forcing close for client %s", c.playerGUID)
+		c.conn.Close()
 	}()
 
 	go c.writePump(ctx, outbox)
@@ -91,5 +87,7 @@ func (c *client) run(ctx context.Context, inbox chan<- msgPlayer, outbox <-chan 
 }
 
 func (c *client) dispose() {
-	c.conn.Close()
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }

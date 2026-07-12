@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/beevik/guid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,6 +28,22 @@ type table struct {
 	mu      sync.RWMutex
 }
 
+func createTable(tableName string, r GameRules) *table {
+	log.Infof("creating table %v", tableName)
+	t := table{
+		summary: tableSummary{
+			TableName: tableName,
+			TableGUID: guid.NewString(),
+		},
+		rules:   r,
+		players: make(map[string]player),
+		inbox:   make(chan msgPlayer),
+		outbox:  make(map[string]chan msgPlayer),
+	}
+	log.Debugf("%+v", t.summary)
+	return &t
+}
+
 func (t *table) getSummary() tableSummary {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -36,6 +53,26 @@ func (t *table) getSummary() tableSummary {
 		TableName: t.summary.TableName,
 		TableGUID: t.summary.TableGUID,
 	}
+}
+
+func (t *table) getPlayer(guid string) *player {
+	t.mu.RLock()
+	p, ok := t.players[guid]
+	t.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	return &p
+}
+
+func (t *table) getPlayers() []player {
+	players := []player{}
+	t.mu.RLock()
+	for _, p := range t.players {
+		players = append(players, p)
+	}
+	t.mu.RUnlock()
+	return players
 }
 
 func (t *table) broadcastState(state map[string]json.RawMessage) error {
@@ -74,13 +111,19 @@ func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlay
 
 // setPlayer() checks if the player is rejoining, then creates a channel to handle outgoing messages
 // clientToClose is not nil, close it
-func (t *table) setPlayer(p player) (playerOutbox <-chan msgPlayer, clientToClose *client) {
+func (t *table) setPlayer(p player, c *client) (playerOutbox <-chan msgPlayer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if oldPlayer, exists := t.players[p.guid]; exists && oldPlayer.client != nil {
-		clientToClose = oldPlayer.client
+	// this can be either a join or a rejoin;
+	// join (new player): create a new outbox chan
+	// rejoin: close the previous client and recycle the outbox chan
+	oldPlayer, exists := t.players[p.guid]
+	if exists && oldPlayer.client != nil && oldPlayer.client.conn != nil {
+		log.Infof("closing old player [%v] connection", oldPlayer.guid)
+		_ = oldPlayer.client.conn.Close()
 	}
+	p.client = c
 
 	playerChan, exists := t.outbox[p.guid]
 	if !exists {
@@ -129,10 +172,8 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 
 	// players clean up
 	t.mu.Lock()
-	for _, p := range t.players {
-		if p.client != nil {
-			close(p.client.outbox)
-		}
+	for _, o := range t.outbox {
+		close(o)
 	}
 	t.mu.Unlock()
 }
