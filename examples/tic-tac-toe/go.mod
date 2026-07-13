@@ -4,7 +4,7 @@ go 1.25.1
 
 require github.com/sirupsen/logrus v1.9.4
 
-require github.com/komugi-dev/gamebox v0.0.0-20260421090954-5172456726d0
+require github.com/komugi-dev/gamebox v0.0.0-20260713100417-d91b8aec48db
 
 require (
 	github.com/beevik/guid v1.0.0 // indirect

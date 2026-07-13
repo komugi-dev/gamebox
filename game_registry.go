@@ -199,7 +199,10 @@ func (g *gameRegistry) quitTable(p player) error {
 }
 
 func (g *gameRegistry) disconnectPlayer(playerGUID string, tableGUID string) {
-	// TODO
+	err := g.quitTable(player{guid: playerGUID, tableGUID: tableGUID})
+	if err != nil {
+		log.Warningf("disconnectPlayer failed for %s at table %s: %v", playerGUID, tableGUID, err)
+	}
 }
 
 func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {

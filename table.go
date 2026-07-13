@@ -24,12 +24,13 @@ type tableSummary struct {
 }
 
 type table struct {
-	summary tableSummary
-	rules   GameRules
-	players map[string]player
-	inbox   chan msgPlayer            // incoming messages from players
-	outbox  map[string]chan msgPlayer // outgoing messages fo players
-	mu      sync.RWMutex
+	summary  tableSummary
+	rules    GameRules
+	players  map[string]player
+	inbox    chan msgPlayer            // incoming messages from players
+	outbox   map[string]chan msgPlayer // outgoing messages fo players
+	turnGUID map[string]string         // check the message ids in every turn
+	mu       sync.RWMutex
 }
 
 func createTable(tableName string, r GameRules) *table {
@@ -39,10 +40,11 @@ func createTable(tableName string, r GameRules) *table {
 			TableName: tableName,
 			TableGUID: guid.NewString(),
 		},
-		rules:   r,
-		players: make(map[string]player),
-		inbox:   make(chan msgPlayer),
-		outbox:  make(map[string]chan msgPlayer),
+		rules:    r,
+		players:  make(map[string]player),
+		inbox:    make(chan msgPlayer),
+		outbox:   make(map[string]chan msgPlayer),
+		turnGUID: make(map[string]string),
 	}
 	log.Debugf("%+v", t.summary)
 	return &t
@@ -105,9 +107,11 @@ func (t *table) broadcastState(state map[string]json.RawMessage) error {
 }
 
 func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
-	t.mu.RLock()
+	turnGuid := guid.NewString()
+	t.mu.Lock()
 	outbox, ok := t.outbox[playerGUID]
-	t.mu.RUnlock()
+	t.turnGUID[playerGUID] = turnGuid
+	t.mu.Unlock()
 
 	if !ok {
 		return fmt.Errorf("player %s not found or disconnected", playerGUID)
@@ -115,6 +119,7 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 
 	msg := msgPlayer{
 		playerGUID: playerGUID,
+		turnGUID:   turnGuid,
 		payload:    state,
 	}
 
@@ -209,6 +214,18 @@ func (t *table) deletePlayer(playerGUID string) {
 	t.mu.Unlock()
 }
 
+func (t *table) isValidTurn(playerGUID string, turnGUID string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	tg, ok := t.turnGUID[playerGUID]
+	valid := ok && tg == turnGUID
+	if valid {
+		delete(t.turnGUID, turnGUID)
+	}
+	return valid
+}
+
 func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
 	log.Infof("Table %s starting...", t.summary.TableGUID)
 
@@ -220,6 +237,11 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 		if !ok {
 			log.Warningf("no more msg; table: %v", t.summary.TableGUID)
 			break
+		}
+		if !t.isValidTurn(msg.playerGUID, msg.turnGUID) {
+			log.Warningf("invalid id in msg; table: %v; player: %v; turnGuid: %v",
+				t.summary.TableGUID, msg.playerGUID, msg.turnGUID)
+			continue
 		}
 
 		// player sent a valid message
