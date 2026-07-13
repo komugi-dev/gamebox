@@ -2,11 +2,15 @@ package gamebox
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/beevik/guid"
 	log "github.com/sirupsen/logrus"
 )
+
+// outbox buffer gives a room to handle network jitter
+const outboxBufferSize = 256
 
 type msgPlayer struct {
 	playerGUID string
@@ -76,23 +80,85 @@ func (t *table) getPlayers() []player {
 }
 
 func (t *table) broadcastState(state map[string]json.RawMessage) error {
-	// TODO
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	for guid, rawState := range state {
+		outbox, ok := t.outbox[guid]
+		if !ok {
+			continue
+		}
+
+		msg := msgPlayer{
+			playerGUID: guid,
+			payload:    rawState,
+		}
+
+		select {
+		case outbox <- msg:
+		default:
+			log.Warningf("outbox buffer full for player %s during broadcast", guid)
+			// go t.deletePlayer(playerGUID) // think more on this
+		}
+	}
 	return nil
 }
 
 func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
-	// TODO
-	return nil
+	t.mu.RLock()
+	outbox, ok := t.outbox[playerGUID]
+	t.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("player %s not found or disconnected", playerGUID)
+	}
+
+	msg := msgPlayer{
+		playerGUID: playerGUID,
+		payload:    state,
+	}
+
+	select {
+	case outbox <- msg:
+		return nil
+	default:
+		log.Warningf("outbox buffer full for player %s during sendYourTurn", playerGUID)
+		// go t.deletePlayer(playerGUID) // think more on this
+		return fmt.Errorf("buffer full for player %s", playerGUID)
+	}
 }
 
 func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
-	// TODO
-	return nil
+	t.mu.RLock()
+	outbox, ok := t.outbox[playerGUID]
+	t.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("player %s not found or disconnected", playerGUID)
+	}
+
+	// send a valid json to represent the error
+	errPayload, _ := json.Marshal(map[string]string{
+		"type":  "error",
+		"error": errMsg,
+	})
+
+	msg := msgPlayer{
+		playerGUID: playerGUID,
+		payload:    errPayload,
+	}
+
+	select {
+	case outbox <- msg:
+		return nil
+	default:
+		log.Warningf("outbox buffer full for player %s during sendError", playerGUID)
+		// go t.deletePlayer(playerGUID) // think more on this
+		return fmt.Errorf("buffer full for player %s", playerGUID)
+	}
 }
 
 func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	var err error
 	if len(updatedStatus) > 0 {
@@ -101,6 +167,7 @@ func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlay
 			log.Errorf("broadcast failed; table:%v; err:%v", t.summary.TableGUID, err)
 		}
 	}
+
 	for _, nextPlayerGUID := range nextPlayers {
 		err = t.sendYourTurn(nextPlayerGUID, updatedStatus[nextPlayerGUID])
 		if err != nil {
@@ -127,7 +194,7 @@ func (t *table) setPlayer(p player, c *client) (playerOutbox <-chan msgPlayer) {
 
 	playerChan, exists := t.outbox[p.guid]
 	if !exists {
-		playerChan = make(chan msgPlayer)
+		playerChan = make(chan msgPlayer, outboxBufferSize)
 		t.outbox[p.guid] = playerChan
 	}
 	playerOutbox = playerChan
