@@ -14,8 +14,6 @@ import (
 type Engine struct {
 	Name     string
 	registry *gameRegistry
-
-	// TODO: add internal state
 }
 
 // Factory to create the rules/logic object for the specific game
