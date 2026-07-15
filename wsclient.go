@@ -38,7 +38,7 @@ func (c *client) writePump(ctx context.Context, outbox <-chan msgPlayer) {
 				return
 			}
 
-			err := c.conn.WriteMessage(websocket.TextMessage, msg.payload)
+			err := c.conn.WriteJSON(msg)
 			if err != nil {
 				log.Errorf("ws write failed [%v]; %v", c.playerGUID, err)
 				return
@@ -57,8 +57,8 @@ func (c *client) readPump(inbox chan<- msgPlayer) error {
 			log.Errorf("ws read failed [%v]; %v", c.playerGUID, err)
 			break
 		}
-		if msg.playerGUID != c.playerGUID {
-			log.Errorf("guid check failed exp:[%v] recv:[%v]", c.playerGUID, msg.playerGUID)
+		if msg.PlayerGUID != c.playerGUID {
+			log.Errorf("guid check failed exp:[%v] recv:[%v]", c.playerGUID, msg.PlayerGUID)
 			continue
 		}
 		inbox <- msg

@@ -13,9 +13,9 @@ import (
 const outboxBufferSize = 256
 
 type msgPlayer struct {
-	playerGUID string
-	turnGUID   string
-	payload    json.RawMessage
+	PlayerGUID string          `json:"player_guid"`
+	TurnID     string          `json:"turn_id"`
+	Payload    json.RawMessage `json:"payload"`
 }
 
 type tableSummary struct {
@@ -92,8 +92,8 @@ func (t *table) broadcastState(state map[string]json.RawMessage) error {
 		}
 
 		msg := msgPlayer{
-			playerGUID: guid,
-			payload:    rawState,
+			PlayerGUID: guid,
+			Payload:    rawState,
 		}
 
 		select {
@@ -118,9 +118,9 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 	}
 
 	msg := msgPlayer{
-		playerGUID: playerGUID,
-		turnGUID:   turnGuid,
-		payload:    state,
+		PlayerGUID: playerGUID,
+		TurnID:     turnGuid,
+		Payload:    state,
 	}
 
 	select {
@@ -149,8 +149,8 @@ func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
 	})
 
 	msg := msgPlayer{
-		playerGUID: playerGUID,
-		payload:    errPayload,
+		PlayerGUID: playerGUID,
+		Payload:    errPayload,
 	}
 
 	select {
@@ -238,16 +238,16 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 			log.Warningf("no more msg; table: %v", t.summary.TableGUID)
 			break
 		}
-		if !t.isValidTurn(msg.playerGUID, msg.turnGUID) {
+		if !t.isValidTurn(msg.PlayerGUID, msg.TurnID) {
 			log.Warningf("invalid id in msg; table: %v; player: %v; turnGuid: %v",
-				t.summary.TableGUID, msg.playerGUID, msg.turnGUID)
+				t.summary.TableGUID, msg.PlayerGUID, msg.TurnID)
 			continue
 		}
 
 		// player sent a valid message
-		updatedStatus, nextPlayers, isGameOver, err := t.rules.Play(msg.playerGUID, msg.payload)
+		updatedStatus, nextPlayers, isGameOver, err := t.rules.Play(msg.PlayerGUID, msg.Payload)
 		if err != nil {
-			t.sendErrorTo(msg.playerGUID, err.Error())
+			t.sendErrorTo(msg.PlayerGUID, err.Error())
 			continue
 		}
 

@@ -56,14 +56,14 @@ components:
           turn_id:
             type: string
             description: Unique ID associated with the turn, sent along with the YourTurn message.
-          play_choice:
+          payload:
             type: object
             description: Payload depending on the game logic.
         required:
           - type
           - player_guid
           - turn_id
-          - play_choice
+          - payload
 
     StateMessage:
       name: StateMessage
@@ -78,13 +78,13 @@ components:
           player_guid:
             type: string
             description: The recipient. In case of hidden information, the game logic will filter.
-          game_state:
+          payload:
             type: object
             description: The game status the recipient can access to.
         required:
           - type
           - player_guid
-          - game_state
+          - payload
 
     YourTurnMessage:
       name: YourTurnMessage
@@ -99,7 +99,7 @@ components:
           player_guid:
             type: string
             description: Unique ID associated with the client.
-          game_state:
+          payload:
             type: object
             description: Updated game status.
           turn_id:
