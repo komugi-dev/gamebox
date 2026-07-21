@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,9 +27,7 @@ type Session struct {
 }
 
 type client struct {
-	// websocket client (not exported)
-	inbox  chan json.RawMessage
-	outbox chan json.RawMessage
+	conn *websocket.Conn // websocket
 }
 
 type TableSummary struct {
@@ -37,8 +36,8 @@ type TableSummary struct {
 }
 
 type Table struct {
-	table TableSummary
-	ss    *Session
+	Summary TableSummary
+	ss      *Session
 }
 
 type Player struct {
@@ -46,9 +45,14 @@ type Player struct {
 	Guid  string
 	Table Table
 
-	turId string
-	ws    *client
-	ss    *Session
+	turnId string
+
+	ss *Session
+
+	ws     *client
+	inbox  chan msgPlayer // network -> client
+	outbox chan msgPlayer // client -> network
+
 }
 
 func CreateSession(cli *http.Client, gameboxURL url.URL) *Session {
@@ -63,9 +67,9 @@ func CreateSession(cli *http.Client, gameboxURL url.URL) *Session {
 
 // Table() creates a table with the given name.
 // It returns the table id on success.
-func (c *Session) Table(ctx context.Context, name string) (Table, error) {
+func (s *Session) Table(ctx context.Context, name string) (Table, error) {
 
-	url := c.url.JoinPath("tables")
+	url := s.url.JoinPath("tables")
 	ts := TableSummary{
 		TableName: name,
 	}
@@ -78,7 +82,7 @@ func (c *Session) Table(ctx context.Context, name string) (Table, error) {
 		return Table{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.cli.Do(req)
+	resp, err := s.cli.Do(req)
 	if err != nil {
 		return Table{}, err
 	}
@@ -92,15 +96,59 @@ func (c *Session) Table(ctx context.Context, name string) (Table, error) {
 		return Table{}, err
 	}
 
-	return Table{table: ts, ss: c}, nil
+	return Table{Summary: ts, ss: s}, nil
 }
 
 // Tables() returns a list of tables.
-func (c *Session) Tables(ctx context.Context) ([]Table, error) {
-	return nil, nil
+func (s *Session) Tables(ctx context.Context) ([]Table, error) {
+	url := s.url.JoinPath("tables")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
+	if err != nil {
+		return []Table{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.cli.Do(req)
+	if err != nil {
+		return []Table{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return []Table{}, fmt.Errorf("wrong return code %v", resp.StatusCode)
+	}
+	ts := []TableSummary{}
+	dec := json.NewDecoder(resp.Body)
+	err = dec.Decode(&ts)
+	if err != nil {
+		return []Table{}, err
+	}
+
+	tables := []Table{}
+	for _, t := range ts {
+		tables = append(tables, Table{
+			Summary: t,
+			ss:      s,
+		})
+	}
+
+	return tables, nil
 }
 
 func (t *Table) Start(ctx context.Context) error {
+	s := t.ss
+	url := s.url.JoinPath("tables", t.Summary.TableGUID, "start")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.cli.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("wrong return code %v", resp.StatusCode)
+	}
 	return nil
 }
 
@@ -111,26 +159,128 @@ func CreatePlayer(name string, s *Session) *Player {
 	}
 }
 
-// Join() joins a table.
-func (c *Player) Join(ctx context.Context, t Table) error {
-	// table join
-	// instantiate web socket
+type joinTableRequest struct {
+	PlayerName string `json:"player_name"`
+}
+
+type joinTableResponse struct {
+	WebsocketSecret string `json:"websocket_secret"`
+}
+
+func (p *Player) join(ctx context.Context, t Table) (string, error) {
+	s := p.ss
+	url := s.url.JoinPath("tables", t.Summary.TableGUID, "join")
+	jr := joinTableRequest{
+		PlayerName: p.Name,
+	}
+	buf, err := json.Marshal(jr)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode request [%v][%v]", jr, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), bytes.NewReader(buf))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.cli.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("wrong return code %v", resp.StatusCode)
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	jresp := joinTableResponse{}
+	err = dec.Decode(&jresp)
+	if err != nil {
+		return "", err
+	}
+
+	p.Table = t
+	return jresp.WebsocketSecret, nil
+}
+
+func (p *Player) wsConn(ctx context.Context, secret string) error {
+
+	// prepare the request for websocket
+	s := p.ss
+	u := s.url.JoinPath("ws")
+	if u.Scheme == "https" {
+		u.Scheme = "wss"
+	} else {
+		u.Scheme = "ws"
+	}
+	q := u.Query()
+	q.Add("secret", secret)
+	u.RawQuery = q.Encode()
+
+	// dial websocket
+	dialer := websocket.DefaultDialer
+	conn, resp, err := dialer.DialContext(ctx, u.String(), nil)
+	if err != nil {
+		status := "unknown"
+		if resp != nil {
+			status = fmt.Sprintf("%d", resp.StatusCode)
+		}
+		return fmt.Errorf("websocket handshake failed: %v (status: %v)", err, status)
+	}
+
+	// get the guid
+	var welcomeMsg msgPlayer
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	err = conn.ReadJSON(&welcomeMsg)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("failed to read welcome message: %v", err)
+	}
+	_ = conn.SetReadDeadline(time.Time{})
+	p.Guid = welcomeMsg.PlayerGUID
+
+	// run the client
+	p.inbox = make(chan msgPlayer, 256)
+	p.outbox = make(chan msgPlayer, 256)
+	p.ws = &client{
+		conn: conn,
+	}
+	go func() {
+		err := p.ws.run(ctx, p.inbox, p.outbox)
+		if err != nil {
+			log.Errorf("client run error; %v", err)
+		}
+	}()
+
+	return nil
+
+}
+
+// Join() joins a table and instantiate the web socket.
+func (p *Player) Join(ctx context.Context, t Table) error {
+	secret, err := p.join(ctx, t)
+	if err != nil {
+		return err
+	}
+	err = p.wsConn(ctx, secret)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 // Rejoin() rejoins a table.
-func (c *Player) Rejoin(ctx context.Context) error {
+func (p *Player) Rejoin(ctx context.Context) error {
 	return nil
 }
 
-func (c *Player) Quit(ctx context.Context) error {
+func (p *Player) Quit(ctx context.Context) error {
 	return nil
 }
 
 // GetMsg() get messages from the gamebox service
-func (c *Player) GetMsg(ctx context.Context) (json.RawMessage, error) {
+func (p *Player) GetMsg(ctx context.Context) (json.RawMessage, error) {
 	select {
-	case msg := <-c.ws.inbox:
+	case msg := <-p.ws.inbox:
 		return msg, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -138,8 +288,8 @@ func (c *Player) GetMsg(ctx context.Context) (json.RawMessage, error) {
 }
 
 // SendMsg() sends messages to the gamebox service
-func (c *Player) SendMsg(ctx context.Context, msg json.RawMessage) error {
-	c.ss.
+func (p *Player) SendMsg(ctx context.Context, msg json.RawMessage) error {
+	p.ss.
 		c.ws.outbox <- msg
 	return nil
 }
