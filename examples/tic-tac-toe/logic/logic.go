@@ -16,7 +16,7 @@ const numPlayers = 2
 var winChecks = [8][3]int{
 	{0, 1, 2}, {3, 4, 5}, {6, 7, 8}, // rows
 	{0, 3, 6}, {1, 4, 7}, {2, 5, 8}, // cols
-	{0, 4, 8}, {3, 4, 6}, // diags
+	{0, 4, 8}, {2, 4, 6}, // diags
 }
 
 type T3Logic struct {
@@ -172,7 +172,7 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	}
 
 	// continue the game
-	t.nextPlayer()
+	nextPlayers = append(nextPlayers, t.players[t.nextPlayer()])
 
 	return
 }
