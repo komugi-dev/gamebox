@@ -25,6 +25,9 @@ type GameRules interface {
 	// Returning an error means a severe violation of the game's rules, a sign of a client misbehaving.
 	// In such a case, the GameBox will ignore the other parameters.
 	// It is the engine's responsibility to manage the follow-up.
+	// Suggested semantics for nextPlayers and isGameOver:
+	// - isGameOver is false: the game continues, nextPlayers contains the player(s) whose move is expected
+	// - isGameOver is true: the game is over; nextPlayers contains the winner(s). If empyt, the game ends in a draw.
 	Play(playerId string, move json.RawMessage) (
 		updatedStatus map[string]json.RawMessage,
 		nextPlayers []string,
