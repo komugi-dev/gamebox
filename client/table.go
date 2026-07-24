@@ -22,12 +22,11 @@ func (t *Table) Start(ctx context.Context) error {
 	url := s.url.JoinPath("tables", t.Summary.TableGUID, "start")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create request; %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.cli.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to do http request; %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNoContent {

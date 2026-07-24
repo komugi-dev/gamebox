@@ -37,7 +37,7 @@ func (s *Session) Table(ctx context.Context, name string) (Table, error) {
 	}
 	buf, err := json.Marshal(ts)
 	if err != nil {
-		return Table{}, fmt.Errorf("failed to encode table [%v][%v]", ts, err)
+		return Table{}, fmt.Errorf("failed to encode table [%v]: %w", ts, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), bytes.NewReader(buf))
 	if err != nil {
@@ -68,7 +68,7 @@ func (s *Session) Tables(ctx context.Context) ([]Table, error) {
 	if err != nil {
 		return []Table{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	resp, err := s.cli.Do(req)
 	if err != nil {
 		return []Table{}, err
@@ -84,7 +84,7 @@ func (s *Session) Tables(ctx context.Context) ([]Table, error) {
 		return []Table{}, err
 	}
 
-	tables := []Table{}
+	tables := make([]Table, 0, len(ts))
 	for _, t := range ts {
 		tables = append(tables, Table{
 			Summary: t,
