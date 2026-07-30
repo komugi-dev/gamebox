@@ -179,3 +179,19 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 
 	return
 }
+
+func (t *T3Logic) Info() gamebox.InstanceStatus {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	i := gamebox.InstanceStatus{
+		Players: len(t.players),
+	}
+
+	i.State = "lobby"
+	if i.Players == 2 {
+		i.State = "full"
+	}
+
+	return i
+}

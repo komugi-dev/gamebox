@@ -9,9 +9,18 @@ import (
 
 func main() {
 	log.SetLevel(log.DebugLevel)
+
+	meta := gamebox.EngineMeta{
+		Name:       "Tic-Tac-Toe",
+		Version:    "1.0.0",
+		Desc:       "Classic 3x3 grid game",
+		MinPlayers: 2,
+		MaxPlayers: 2,
+	}
+
 	log.Info("Starting Tic-Tac-Toe")
 
-	e := gamebox.NewEngine("Tic-Tac-Toe", logic.CreateT3)
+	e := gamebox.NewEngine(meta, logic.CreateT3)
 	e.Run(8181)
 
 }

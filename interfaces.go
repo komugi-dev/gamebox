@@ -2,8 +2,29 @@ package gamebox
 
 import "encoding/json"
 
+// EngineMeta contains immutable static data of the game.
+type EngineMeta struct {
+	Name       string          `json:"name"`
+	Version    string          `json:"version"`
+	Desc       string          `json:"description"`
+	MinPlayers int             `json:"min_players"`
+	MaxPlayers int             `json:"max_players"`
+	Extended   json.RawMessage `json:"extended,omitempty"`
+}
+
+// InstanceStatus represents the dynamic state of the table.
+type InstanceStatus struct {
+	State    string          `json:"state"`              // e.g. "lobby", "playing", "done"
+	Players  int             `json:"players"`            // the current players
+	Extended json.RawMessage `json:"extended,omitempty"` // extended info
+}
+
 // GameRules is the interface that a game engine must implement to be hosted by GameBox.
 type GameRules interface {
+	// Info() returns information about the game.
+	// Values and meanings of the fields are responsibility of the game creator.
+	Info() InstanceStatus
+
 	// AddPlayer() registers a player in the engine's internal state.
 	AddPlayer(playerId string) error
 

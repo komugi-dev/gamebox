@@ -12,7 +12,7 @@ import (
 
 // The Game Box Engine structure, container for turn based games
 type Engine struct {
-	Name     string
+	Info     EngineMeta
 	registry *gameRegistry
 }
 
@@ -21,19 +21,18 @@ type Engine struct {
 type GameFactory func() GameRules
 
 // Create a new engine based on a set of rules
-func NewEngine(name string, f GameFactory) *Engine {
-	log.Debugf("creating new engine for %s", name)
+func NewEngine(meta EngineMeta, f GameFactory) *Engine {
+	log.Debugf("creating new engine for %s", meta.Name)
 	r := newGameRegistry(f)
 	return &Engine{
-		Name:     name,
+		Info:     meta,
 		registry: r,
 	}
 }
 
 // run the engine
 func (e *Engine) Run(port int) error {
-	log.Infof("Gamebox for %s", e.Name)
-
+	log.Infof("Gamebox for %+v", e.Info)
 	var err error
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
