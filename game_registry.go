@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	TableNotFound  = "table not found"
-	PlayerNotFound = "player not found"
-	TicketNotFound = "ticket not found"
+	TableNotFound  = "table [%v] not found"
+	PlayerNotFound = "player [%v] not found"
+	TicketNotFound = "ticket [%v] not found"
 	StartError     = "game start error; table guid: %v; err: %v"
 )
 
@@ -82,7 +82,7 @@ func (g *gameRegistry) joinTable(tableGUID string, playerName string) (wsSecret 
 	_, ok := g.registry[tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return "", errors.New(TableNotFound)
+		return "", fmt.Errorf(TableNotFound, tableGUID)
 	}
 
 	p := player{
@@ -113,12 +113,12 @@ func (g *gameRegistry) rejoinTable(tableGUID string, playerGUID string) (wsSecre
 	t, ok := g.registry[tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return "", errors.New(TableNotFound)
+		return "", fmt.Errorf(TableNotFound, tableGUID)
 	}
 
 	p := t.getPlayer(playerGUID)
 	if p == nil {
-		return "", errors.New(PlayerNotFound)
+		return "", fmt.Errorf(PlayerNotFound, playerGUID)
 	}
 
 	log.Infof("player %+v rejoining game %v", p, tableGUID)
@@ -145,7 +145,7 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 
 	t, ok := g.pendingTickets[secret]
 	if !ok {
-		return joinTicket{}, errors.New(TicketNotFound)
+		return joinTicket{}, fmt.Errorf(TicketNotFound, secret)
 	}
 
 	// remove the ticket nevertheless
@@ -154,7 +154,7 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 	// check the table exists
 	_, ok = g.registry[t.tableGUID]
 	if !ok {
-		return joinTicket{}, errors.New(TableNotFound)
+		return joinTicket{}, fmt.Errorf(TableNotFound, t.tableGUID)
 	}
 
 	return t, nil
@@ -167,13 +167,19 @@ func (g *gameRegistry) seatPlayer(p player, c *client) (tableInbox chan<- msgPla
 	table, ok := g.registry[p.tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		err = errors.New(TableNotFound)
+		err = fmt.Errorf(TableNotFound, p.tableGUID)
 		return nil, nil, err
 	}
 	tableInbox = table.inbox
 
+	err = table.rules.AddPlayer(p.guid)
+	if err != nil {
+		err = fmt.Errorf("AddPlayer failed; table [%v]; player [%v]; err [%w]", p.tableGUID, p.guid, err)
+		return nil, nil, err
+	}
+
 	playerOutbox = table.setPlayer(p, c)
-	return
+	return tableInbox, playerOutbox, nil
 }
 
 func (g *gameRegistry) quitTable(p player) error {
@@ -181,12 +187,12 @@ func (g *gameRegistry) quitTable(p player) error {
 	t, ok := g.registry[p.tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return errors.New(TableNotFound)
+		return fmt.Errorf(TableNotFound, p.tableGUID)
 	}
 
 	player := t.getPlayer(p.guid)
 	if player == nil {
-		return errors.New(PlayerNotFound)
+		return fmt.Errorf(PlayerNotFound, p.guid)
 	}
 
 	if player.client != nil {
@@ -213,7 +219,7 @@ func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
 
 	t, ok := g.registry[tableGUID]
 	if !ok {
-		return ret, errors.New(TableNotFound)
+		return ret, fmt.Errorf(TableNotFound, tableGUID)
 	}
 
 	for _, p := range t.getPlayers() {
@@ -230,10 +236,10 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 	g.mu.RUnlock()
 	if !ok {
 		log.Errorf("table %v not fonud; aborting", tableGUID)
-		return errors.New(TableNotFound)
+		return fmt.Errorf(TableNotFound, tableGUID)
 	}
 
-	log.Infof("Table %s starting...", t.summary.TableGUID)
+	log.Infof("startTable: Table %s starting...", t.summary.TableGUID)
 
 	// init the game
 	updatedStatus, nextPlayers, err := t.rules.Start()

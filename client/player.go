@@ -57,6 +57,7 @@ func (p *Player) join(ctx context.Context, t Table) (string, error) {
 	jr := joinTableRequest{
 		PlayerName: p.Name,
 	}
+	log.Debugf("joining to url: %v", url)
 	buf, err := json.Marshal(jr)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode request [%v][%v]", jr, err)
@@ -82,6 +83,7 @@ func (p *Player) join(ctx context.Context, t Table) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	log.Debugf("decoded join resp: %v", jresp)
 
 	p.Table = t
 	return jresp.WebsocketSecret, nil

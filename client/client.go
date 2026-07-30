@@ -86,6 +86,7 @@ func (c *client) run(ctx context.Context, inbox chan<- msgPlayer, outbox <-chan 
 	go func() {
 		defer c.wg.Done()
 		c.readPump(ctx, inbox)
+		c.dispose()
 	}()
 }
 

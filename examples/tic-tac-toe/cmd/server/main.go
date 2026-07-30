@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	log.SetLevel(log.DebugLevel)
 	log.Info("Starting Tic-Tac-Toe")
 
 	e := gamebox.NewEngine("Tic-Tac-Toe", logic.CreateT3)

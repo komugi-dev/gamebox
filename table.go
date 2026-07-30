@@ -114,7 +114,7 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 	t.mu.Unlock()
 
 	if !ok {
-		return fmt.Errorf("player %s not found or disconnected", playerGUID)
+		return fmt.Errorf("sendErrorTo - player [%s] not found or disconnected", playerGUID)
 	}
 
 	msg := msgPlayer{
@@ -134,12 +134,13 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 }
 
 func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
+	log.Warningf("sending error to %v; %v", playerGUID, errMsg)
 	t.mu.RLock()
 	outbox, ok := t.outbox[playerGUID]
 	t.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("player %s not found or disconnected", playerGUID)
+		return fmt.Errorf("sendErrorTo - player [%s] not found or disconnected", playerGUID)
 	}
 
 	// send a valid json to represent the error
@@ -173,6 +174,11 @@ func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlay
 		}
 	}
 
+	log.Debugf("updatePlayers - next players: %v", nextPlayers)
+	if len(nextPlayers) == 0 {
+		log.Warningf("updatePlayers - next players empty; table [%v][%v]", t.summary.TableName, t.summary.TableGUID)
+	}
+
 	for _, nextPlayerGUID := range nextPlayers {
 		err = t.sendYourTurn(nextPlayerGUID, updatedStatus[nextPlayerGUID])
 		if err != nil {
@@ -199,13 +205,14 @@ func (t *table) setPlayer(p player, c *client) (playerOutbox <-chan msgPlayer) {
 
 	playerChan, exists := t.outbox[p.guid]
 	if !exists {
+		log.Debugf("create outbox for player [%v]", p.guid)
 		playerChan = make(chan msgPlayer, outboxBufferSize)
 		t.outbox[p.guid] = playerChan
 	}
 	playerOutbox = playerChan
 
 	t.players[p.guid] = p
-	return
+	return playerOutbox
 }
 
 func (t *table) deletePlayer(playerGUID string) {
@@ -227,7 +234,7 @@ func (t *table) isValidTurn(playerGUID string, turnGUID string) bool {
 }
 
 func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
-	log.Infof("Table %s starting...", t.summary.TableGUID)
+	log.Infof("startLoop: Table %s starting...", t.summary.TableGUID)
 
 	t.updatePlayers(updatedStatus, nextPlayers)
 

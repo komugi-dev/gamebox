@@ -14,6 +14,8 @@ type Session struct {
 	url url.URL
 }
 
+type TablesResp []TableSummary
+
 // CreateSession() creates a new game session.
 // A session allows to create a new table get a list of existing tables.
 // Create a session first, then a table and a player.
@@ -77,7 +79,7 @@ func (s *Session) Tables(ctx context.Context) ([]Table, error) {
 	if resp.StatusCode != http.StatusOK {
 		return []Table{}, fmt.Errorf("wrong return code %v", resp.StatusCode)
 	}
-	ts := []TableSummary{}
+	ts := TablesResp{}
 	dec := json.NewDecoder(resp.Body)
 	err = dec.Decode(&ts)
 	if err != nil {

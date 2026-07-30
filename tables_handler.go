@@ -1,6 +1,7 @@
 package gamebox
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,16 +50,9 @@ func (api *API) createTableHandler() http.HandlerFunc {
 	}
 }
 
-type listTableResponse struct {
-	Tables []tableSummary
-}
-
 func (api *API) listTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tab := api.registry.listTables()
-		resp := listTableResponse{
-			Tables: tab,
-		}
+		resp := api.registry.listTables()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -233,6 +227,7 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Debug("ws connection upgrade OK")
 
 		// run blocks until the web socket is alive
 		client := newClient(conn, ticket.player.guid)
@@ -245,8 +240,19 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 			conn.Close()
 			return
 		}
+		log.Debugf("ws player on the table (client:%v)", client.playerGUID)
 
-		err = client.run(r.Context(), tableInbox, playerOutbox)
+		welcome := msgPlayer{
+			PlayerGUID: ticket.player.guid,
+		}
+		if err := conn.WriteJSON(welcome); err != nil {
+			log.Errorf("failed to send welcome message: %v", err)
+			conn.Close()
+			return
+		}
+		log.Debug("ws welcome message sent")
+
+		err = client.run(context.Background(), tableInbox, playerOutbox)
 		// the player was probably disconnected
 		if err != nil {
 			api.registry.disconnectPlayer(ticket.player.guid, ticket.tableGUID)

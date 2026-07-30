@@ -96,6 +96,7 @@ func (t *T3Logic) isGameOver() (gameOver bool, winner string) {
 }
 
 func (t *T3Logic) AddPlayer(playerId string) error {
+	log.Infof("ttt request to add player [%v]", playerId)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -123,6 +124,7 @@ func (t *T3Logic) Start() (updatedStatus map[string]json.RawMessage,
 
 	// get next player
 	nextPlayers = append(nextPlayers, t.players[t.currPlayer])
+	log.Debugf("ttt start - players[%v]; next[%v]", t.players, nextPlayers)
 
 	return
 }
@@ -147,6 +149,7 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	var m int
 	err = json.Unmarshal(move, &m)
 	if err != nil {
+		err = fmt.Errorf("unmarshal failed; player [%v]; %w", playerId, err)
 		return
 	}
 	log.Debugf("pl:%v; move:%v", playerId, m)
