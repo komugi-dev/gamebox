@@ -27,9 +27,22 @@ type Player struct {
 
 }
 
+type MsgType string
+
+const (
+	MsgTypeWelcome  MsgType = "welcome"
+	MsgTypePlay     MsgType = "play"
+	MsgTypeState    MsgType = "state"
+	MsgTypeYourTurn MsgType = "yourturn"
+	MsgTypeGameOver MsgType = "gameover"
+	MsgTypeError    MsgType = "error"
+)
+
 type msgPlayer struct {
+	Type       MsgType         `json:"type"`
 	PlayerGUID string          `json:"player_guid"`
 	TurnID     string          `json:"turn_id"`
+	Winners    []string        `json:"winners,omitempty"`
 	Payload    json.RawMessage `json:"payload"`
 }
 
@@ -255,23 +268,26 @@ func (p *Player) Quit(ctx context.Context) error {
 
 // GetMsg() get messages from the gamebox service.
 // The function blocs until a message is received or when the context is canceled.
-func (p *Player) GetMsg(ctx context.Context) (json.RawMessage, error) {
+func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, error) {
 	select {
 	case msg, ok := <-p.inbox:
 		if !ok {
 			log.Infof("inbox chan closed, exiting")
-			return nil, nil
+			return "", nil, nil
 		}
-		p.turnId = msg.TurnID
-		return msg.Payload, nil
+		if msg.Type == MsgTypeYourTurn {
+			p.turnId = msg.TurnID
+		}
+		return msg.Type, msg.Payload, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return "", nil, ctx.Err()
 	}
 }
 
 // SendMsg() sends messages to the gamebox service.
 func (p *Player) SendMsg(ctx context.Context, msg json.RawMessage) error {
 	mp := msgPlayer{
+		Type:       MsgTypePlay,
 		Payload:    msg,
 		PlayerGUID: p.Guid,
 		TurnID:     p.turnId,

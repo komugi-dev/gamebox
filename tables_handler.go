@@ -11,6 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const maxPlayerNameLen = 1024
+
 // group the handlers
 type API struct {
 	registry *gameRegistry
@@ -79,6 +81,11 @@ func (api *API) joinTableHandler() http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
 			return
+		}
+
+		if len(req.PlayerName) > maxPlayerNameLen {
+			log.Warningf("cutting player name to %v", maxPlayerNameLen)
+			req.PlayerName = req.PlayerName[:maxPlayerNameLen]
 		}
 
 		// add a player
@@ -243,6 +250,7 @@ func (api *API) wsUpgradeHandler() http.HandlerFunc {
 		log.Debugf("ws player on the table (client:%v)", client.playerGUID)
 
 		welcome := msgPlayer{
+			Type:       MsgTypeWelcome,
 			PlayerGUID: ticket.player.guid,
 		}
 		if err := conn.WriteJSON(welcome); err != nil {

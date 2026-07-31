@@ -21,8 +21,8 @@ func createGame() (gamebox.GameRules, *T3Logic) {
 
 func createGameWithPlayers() (gamebox.GameRules, *T3Logic) {
 	tt, ptt := createGame()
-	tt.AddPlayer("1")
-	tt.AddPlayer("2")
+	tt.AddPlayer("1", "")
+	tt.AddPlayer("2", "")
 	return tt, ptt
 }
 
@@ -37,16 +37,16 @@ func TestAddPlayer(t *testing.T) {
 	r, tt := createGame()
 	curr := tt.currPlayer
 
-	err := r.AddPlayer("1")
+	err := r.AddPlayer("1", "")
 	assert.Nil(t, err)
 	assert.Equal(t, "1", tt.players[curr])
 	curr = tt.currPlayer
 
-	err = r.AddPlayer("2")
+	err = r.AddPlayer("2", "")
 	assert.Nil(t, err)
 	assert.Equal(t, "2", tt.players[curr])
 
-	err = r.AddPlayer("3")
+	err = r.AddPlayer("3", "")
 	assert.NotNil(t, err)
 }
 

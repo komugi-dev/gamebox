@@ -22,6 +22,8 @@ channels:
           - $ref: '#/components/messages/WelcomeMessage'
           - $ref: '#/components/messages/StateMessage'
           - $ref: '#/components/messages/YourTurnMessage'
+          - $ref: '#/components/messages/GameOverMessage'
+          - $ref: '#/components/messages/ErrorMessage'
 
 components:
   messages:
@@ -109,3 +111,47 @@ components:
           - type
           - player_guid
           - turn_id
+
+    GameOverMessage:
+      name: GameOverMessage
+      title: Game Over
+      summary: Sent by the server when the game ends.
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [gameover]
+          player_guid:
+            type: string
+            description: The recipient.
+          winners:
+            type: array
+            items:
+              type: string
+            description: List of player GUIDs who won the game. If empty, the game ended in a draw.
+          payload:
+            type: object
+            description: Final game status, including leaderboards or scores depending on game logic.
+        required:
+          - type
+          - player_guid
+          - winners
+          - payload
+
+    ErrorMessage:
+      name: ErrorMessage
+      title: Business logic error
+      summary: Sent by the server when a client's action is invalid.
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [error]
+          payload:
+            type: string
+            description: A human-readable error message explaining what went wrong.
+        required:
+          - type
+          - payload

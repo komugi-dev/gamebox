@@ -26,7 +26,10 @@ type GameRules interface {
 	Info() InstanceStatus
 
 	// AddPlayer() registers a player in the engine's internal state.
-	AddPlayer(playerId string) error
+	// - secret is the secret identifier created by the service
+	// - public contains public data about the player
+	// Developers can use the public string at their own convenience.
+	AddPlayer(secret string, public string) error
 
 	// Start() initializes the game.
 	// It returns the initial state views for the players and the list of players

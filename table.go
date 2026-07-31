@@ -12,8 +12,21 @@ import (
 // outbox buffer gives a room to handle network jitter
 const outboxBufferSize = 256
 
+type MsgType string
+
+const (
+	MsgTypeWelcome  MsgType = "welcome"
+	MsgTypePlay     MsgType = "play"
+	MsgTypeState    MsgType = "state"
+	MsgTypeYourTurn MsgType = "yourturn"
+	MsgTypeGameOver MsgType = "gameover"
+	MsgTypeError    MsgType = "error"
+)
+
 type msgPlayer struct {
+	Type       MsgType         `json:"type"`
 	PlayerGUID string          `json:"player_guid"`
+	Winners    []string        `json:"winners,omitempty"`
 	TurnID     string          `json:"turn_id"`
 	Payload    json.RawMessage `json:"payload"`
 }
@@ -92,6 +105,7 @@ func (t *table) broadcastState(state map[string]json.RawMessage) error {
 		}
 
 		msg := msgPlayer{
+			Type:       MsgTypeState,
 			PlayerGUID: guid,
 			Payload:    rawState,
 		}
@@ -118,6 +132,7 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 	}
 
 	msg := msgPlayer{
+		Type:       MsgTypeYourTurn,
 		PlayerGUID: playerGUID,
 		TurnID:     turnGuid,
 		Payload:    state,
@@ -130,6 +145,25 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 		log.Warningf("outbox buffer full for player %s during sendYourTurn", playerGUID)
 		// go t.deletePlayer(playerGUID) // think more on this
 		return fmt.Errorf("buffer full for player %s", playerGUID)
+	}
+}
+
+// TODO: check
+func (t *table) notifyGameOver(updatedStatus map[string]json.RawMessage, winners []string) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	for pID, statePayload := range updatedStatus {
+		msg := msgPlayer{
+			Type:       MsgTypeGameOver,
+			PlayerGUID: pID,
+			Winners:    winners,
+			Payload:    statePayload,
+		}
+
+		if out, ok := t.outbox[pID]; ok {
+			out <- msg
+		}
 	}
 }
 
@@ -150,6 +184,7 @@ func (t *table) sendErrorTo(playerGUID string, errMsg string) error {
 	})
 
 	msg := msgPlayer{
+		Type:       MsgTypeError,
 		PlayerGUID: playerGUID,
 		Payload:    errPayload,
 	}
@@ -258,11 +293,14 @@ func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers 
 			continue
 		}
 
-		t.updatePlayers(updatedStatus, nextPlayers)
-
+		// game over or continue
+		// TODO: check
 		if isGameOver {
+			t.notifyGameOver(updatedStatus, nextPlayers)
 			log.Infof("Game Over at table %s", t.summary.TableGUID)
 			break
+		} else {
+			t.updatePlayers(updatedStatus, nextPlayers)
 		}
 	}
 

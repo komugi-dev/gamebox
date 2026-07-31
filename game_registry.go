@@ -172,7 +172,7 @@ func (g *gameRegistry) seatPlayer(p player, c *client) (tableInbox chan<- msgPla
 	}
 	tableInbox = table.inbox
 
-	err = table.rules.AddPlayer(p.guid)
+	err = table.rules.AddPlayer(p.guid, p.name)
 	if err != nil {
 		err = fmt.Errorf("AddPlayer failed; table [%v]; player [%v]; err [%w]", p.tableGUID, p.guid, err)
 		return nil, nil, err

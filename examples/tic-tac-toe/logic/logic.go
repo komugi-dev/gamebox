@@ -19,9 +19,14 @@ var winChecks = [8][3]int{
 	{0, 4, 8}, {2, 4, 6}, // diags
 }
 
+type T3Player struct {
+	Secret string
+	Public string
+}
+
 type T3Logic struct {
 	Board      []int `json:"grid"`
-	players    map[int]string
+	players    map[int]T3Player
 	currPlayer int
 	mu         sync.RWMutex
 }
@@ -29,7 +34,7 @@ type T3Logic struct {
 func CreateT3() gamebox.GameRules {
 	t3Logic := T3Logic{
 		Board:      make([]int, 9),
-		players:    make(map[int]string, 0),
+		players:    make(map[int]T3Player, 0),
 		currPlayer: 1,
 	}
 
@@ -51,7 +56,7 @@ func (t *T3Logic) updatedStatus() (updatedStatus map[string]json.RawMessage, err
 	// update status
 	updatedStatus = make(map[string]json.RawMessage, len(t.players))
 	for _, v := range t.players {
-		updatedStatus[v] = jsonGrid
+		updatedStatus[v.Secret] = jsonGrid
 	}
 	return
 }
@@ -80,7 +85,7 @@ func (t *T3Logic) isGameOver() (gameOver bool, winner string) {
 			partial += t.Board[cell]
 		}
 		if partial == winCond {
-			return true, t.players[t.currPlayer]
+			return true, t.players[t.currPlayer].Secret
 		}
 	}
 
@@ -95,8 +100,8 @@ func (t *T3Logic) isGameOver() (gameOver bool, winner string) {
 	return
 }
 
-func (t *T3Logic) AddPlayer(playerId string) error {
-	log.Infof("ttt request to add player [%v]", playerId)
+func (t *T3Logic) AddPlayer(playerId string, playerName string) error {
+	log.Infof("ttt request to add player [%v][%v]", playerId, playerName)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -104,7 +109,10 @@ func (t *T3Logic) AddPlayer(playerId string) error {
 		return fmt.Errorf("board full")
 	}
 
-	t.players[t.currPlayer] = playerId
+	t.players[t.currPlayer] = T3Player{
+		Secret: playerId,
+		Public: playerName,
+	}
 	t.nextPlayer()
 
 	return nil
@@ -123,7 +131,7 @@ func (t *T3Logic) Start() (updatedStatus map[string]json.RawMessage,
 	}
 
 	// get next player
-	nextPlayers = append(nextPlayers, t.players[t.currPlayer])
+	nextPlayers = append(nextPlayers, t.players[t.currPlayer].Secret)
 	log.Debugf("ttt start - players[%v]; next[%v]", t.players, nextPlayers)
 
 	return
@@ -139,7 +147,7 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	defer t.mu.Unlock()
 
 	// check the player
-	pId := t.players[t.currPlayer]
+	pId := t.players[t.currPlayer].Secret
 	if pId != playerId {
 		err = fmt.Errorf("wrong player, expected %v, got %v", pId, playerId)
 		return
@@ -175,7 +183,7 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	}
 
 	// continue the game
-	nextPlayers = append(nextPlayers, t.players[t.nextPlayer()])
+	nextPlayers = append(nextPlayers, t.players[t.nextPlayer()].Secret)
 
 	return
 }
