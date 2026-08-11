@@ -268,19 +268,19 @@ func (p *Player) Quit(ctx context.Context) error {
 
 // GetMsg() get messages from the gamebox service.
 // The function blocs until a message is received or when the context is canceled.
-func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, error) {
+func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, []string, error) {
 	select {
 	case msg, ok := <-p.inbox:
 		if !ok {
 			log.Infof("inbox chan closed, exiting")
-			return "", nil, nil
+			return "", nil, nil, nil
 		}
 		if msg.Type == MsgTypeYourTurn {
 			p.turnId = msg.TurnID
 		}
-		return msg.Type, msg.Payload, nil
+		return msg.Type, msg.Payload, msg.Winners, nil
 	case <-ctx.Done():
-		return "", nil, ctx.Err()
+		return "", nil, nil, ctx.Err()
 	}
 }
 
