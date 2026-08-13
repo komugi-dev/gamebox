@@ -4,79 +4,19 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"net/http"
+	"math/rand/v2"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/beevik/guid"
 	log "github.com/sirupsen/logrus"
 
 	client "github.com/komugi-dev/gamebox/client"
+	"github.com/komugi-dev/gamebox/examples/clientutil"
 )
-
-func setupPlayer(ctx context.Context, pName string) (*client.Player, error) {
-	var joinedTable client.Table
-
-	gbURL, err := url.Parse("http://localhost:8181/gamebox/v1")
-	if err != nil {
-		return nil, fmt.Errorf("cannot parse gamebox URL; %w", err)
-	}
-	cli := http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	// connect to gamebox
-	ss := client.CreateSession(&cli, *gbURL)
-
-	// create a player
-	pl := client.CreatePlayer(pName, ss)
-
-	// get tables
-	existingTables, err := ss.Tables(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get tables; %w", err)
-	}
-	log.Infof("found %v tables", len(existingTables))
-
-	// as there are 2 players per table,
-	// if joining an existing table works, start playing...
-	for _, t := range existingTables {
-		log.Infof("joining table %+v", t)
-		err = pl.Join(ctx, t)
-		if err != nil {
-			log.Warningf("cannot join table %v (%v)", t.Summary.TableGUID, err)
-			continue
-		}
-		joinedTable = t
-		err = joinedTable.Start(ctx)
-		if err != nil {
-			log.Warningf("cannot start table; %v", err)
-			continue
-		}
-		log.Infof("joined and started table %+v", joinedTable.Summary)
-		break
-	}
-	// ...otherwise, create a new table and wait for another player
-	if joinedTable.Summary.TableGUID == "" {
-		joinedTable, err = ss.Table(ctx, "tic-tac-toe-"+guid.NewString())
-		if err != nil {
-			return nil, fmt.Errorf("cannot create new table; %w", err)
-		}
-		log.Infof("created new table %+v", joinedTable.Summary)
-
-		log.Infof("joining table %+v", joinedTable)
-		err = pl.Join(ctx, joinedTable)
-		if err != nil {
-			return nil, fmt.Errorf("cannot join table %v (%v)", joinedTable.Summary.TableGUID, err)
-		}
-	}
-
-	return pl, nil
-}
 
 // drawBoard prints the game grid
 func drawBoard(board []int) {
@@ -144,14 +84,53 @@ func readUserInput(board []int) int {
 	}
 }
 
+// randomBotMove returns a random move.
+func randomBotMove(board []int) int {
+	available := []int{}
+	for idx, val := range board {
+		if val == 0 {
+			available = append(available, idx)
+		}
+	}
+
+	if len(available) == 0 {
+		log.Error("bot cannot find the right move, board full")
+		return -1
+	}
+
+	moveIdx := rand.Int32N((int32)(len(available)))
+	move := available[moveIdx]
+	log.Infof("bot moves to cell %v", move)
+	return move
+}
+
+// the default is human player.
+// "-bot" flag runs in auto mode.
 func main() {
 	log.SetLevel(log.DebugLevel)
 
+	// human or bot
+	isBot := flag.Bool("bot", false, "Play randomly as a bot.")
+	flag.Parse()
+	switch *isBot {
+	case true:
+		fmt.Print("--- BOT player ---")
+	case false:
+		fmt.Print("--- Human player ---")
+	}
+
+	// setup game
 	ctx := context.Background()
-	pl, err := setupPlayer(ctx, "player1")
+	gbURL, err := url.Parse("http://localhost:8181/gamebox/v1")
+	if err != nil {
+		log.Fatalf("cannot parse gamebox URL; %v", err)
+	}
+	pl, err := clientutil.SetupPlayer(ctx, gbURL, "player1", "tic-tac-toe")
 	if err != nil {
 		log.Fatalf("error setup player; %v", err)
 	}
+
+	// game loop
 	for {
 		typ, msg, winners, err := pl.GetMsg(ctx)
 		if err != nil {
@@ -166,7 +145,14 @@ func main() {
 			if err != nil {
 				log.Errorf("wrong payloed; %v", err)
 			}
-			move := readUserInput(board)
+
+			var move int
+			if *isBot {
+				move = randomBotMove(board)
+			} else {
+				move = readUserInput(board)
+			}
+
 			moveJSON, _ := json.Marshal(move)
 			err = pl.SendMsg(ctx, moveJSON)
 			if err != nil {
@@ -182,6 +168,13 @@ func main() {
 			drawBoard(board)
 
 		case client.MsgTypeGameOver:
+			log.Info("updating the board!")
+			err = json.Unmarshal(msg, &board)
+			if err != nil {
+				log.Errorf("wrong payloed; %v", err)
+			}
+			drawBoard(board)
+
 			if len(winners) == 0 {
 				fmt.Print("\n--- DRAW! ---\n")
 				return
