@@ -18,6 +18,8 @@ import (
 	"github.com/komugi-dev/gamebox/examples/clientutil"
 )
 
+const gameboxURL = "http://localhost:8181/gamebox/v1"
+
 // drawBoard prints the game grid
 func drawBoard(board []int) {
 	// printing helper
@@ -121,7 +123,7 @@ func main() {
 
 	// setup game
 	ctx := context.Background()
-	gbURL, err := url.Parse("http://localhost:8181/gamebox/v1")
+	gbURL, err := url.Parse(gameboxURL)
 	if err != nil {
 		log.Fatalf("cannot parse gamebox URL; %v", err)
 	}
