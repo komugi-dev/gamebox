@@ -35,6 +35,7 @@ func (c *client) writePump(ctx context.Context, outbox <-chan msgPlayer) {
 		case msg, ok := <-outbox:
 			if !ok {
 				log.Infof("outbox closed, writePump exiting [%v]", c.playerGUID)
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
@@ -54,9 +55,18 @@ func (c *client) readPump(inbox chan<- msgPlayer) error {
 	for {
 		err = c.conn.ReadJSON(&msg)
 		if err != nil {
-			log.Errorf("ws read failed [%v]; %v", c.playerGUID, err)
+			if websocket.IsUnexpectedCloseError(err,
+				websocket.CloseNormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseAbnormalClosure,
+				websocket.CloseNoStatusReceived) {
+				log.Errorf("ws read failed [%v]; %v", c.playerGUID, err)
+			} else {
+				log.Infof("ws read closed cleanly [%v]", c.playerGUID)
+			}
 			break
 		}
+
 		if msg.PlayerGUID != c.playerGUID {
 			log.Errorf("guid check failed exp:[%v] recv:[%v]", c.playerGUID, msg.PlayerGUID)
 			continue

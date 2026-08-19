@@ -252,8 +252,14 @@ func (t *table) setPlayer(p player, c *client) (playerOutbox <-chan msgPlayer) {
 
 func (t *table) deletePlayer(playerGUID string) {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	delete(t.players, playerGUID)
-	t.mu.Unlock()
+
+	if ch, ok := t.outbox[playerGUID]; ok {
+		close(ch)
+		delete(t.outbox, playerGUID)
+	}
 }
 
 func (t *table) isValidTurn(playerGUID string, turnGUID string) bool {

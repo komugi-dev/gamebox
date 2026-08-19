@@ -21,8 +21,8 @@ func createGame() (gamebox.GameRules, *T3Logic) {
 
 func createGameWithPlayers() (gamebox.GameRules, *T3Logic) {
 	tt, ptt := createGame()
-	tt.AddPlayer("1", "")
-	tt.AddPlayer("2", "")
+	tt.AddPlayer("1", "Alice")
+	tt.AddPlayer("2", "Bob")
 	return tt, ptt
 }
 
@@ -37,16 +37,17 @@ func TestAddPlayer(t *testing.T) {
 	r, tt := createGame()
 	curr := tt.currPlayer
 
-	err := r.AddPlayer("1", "")
+	err := r.AddPlayer("1", "Alice")
 	assert.Nil(t, err)
-	assert.Equal(t, "1", tt.players[curr])
+	assert.Equal(t, "1", tt.players[curr].Secret) // Aggiornato: ora accede a .Secret
+	assert.Equal(t, "Alice", tt.players[curr].Public)
 	curr = tt.currPlayer
 
-	err = r.AddPlayer("2", "")
+	err = r.AddPlayer("2", "Bob")
 	assert.Nil(t, err)
-	assert.Equal(t, "2", tt.players[curr])
+	assert.Equal(t, "2", tt.players[curr].Secret)
 
-	err = r.AddPlayer("3", "")
+	err = r.AddPlayer("3", "Charlie")
 	assert.NotNil(t, err)
 }
 
@@ -59,15 +60,15 @@ func TestUtils(t *testing.T) {
 
 	t.Run("update status", func(t *testing.T) {
 		_, tt := createGameWithPlayers()
-		tt.Board = []int{-1, -1, -1, 0, 0, 0, 1, 1, 1}
+		tt.State.Board = []int{-1, -1, -1, 0, 0, 0, 1, 1, 1} // Aggiornato: assegna a .Board
 		upd, err := tt.updatedStatus()
 		assert.Nil(t, err)
 
-		exp := []int{}
+		var exp T3State // Aggiornato: usa T3State per l'unmarshal
 		for _, stat := range upd {
 			err = json.Unmarshal(stat, &exp)
 			assert.Nil(t, err)
-			assert.Zero(t, slices.Compare(exp, tt.Board))
+			assert.Zero(t, slices.Compare(exp.Board, tt.State.Board))
 		}
 	})
 
@@ -75,7 +76,7 @@ func TestUtils(t *testing.T) {
 		_, tt := createGameWithPlayers()
 		err := tt.move(tt.currPlayer, 0)
 		assert.Nil(t, err)
-		assert.Zero(t, slices.Compare(tt.Board, []int{tt.currPlayer, 0, 0, 0, 0, 0, 0, 0, 0}))
+		assert.Zero(t, slices.Compare(tt.State.Board, []int{tt.currPlayer, 0, 0, 0, 0, 0, 0, 0, 0}))
 
 		// cell already occupied
 		err = tt.move(tt.currPlayer, 0)
@@ -103,20 +104,20 @@ func TestUtils(t *testing.T) {
 			for _, cell := range i {
 				board[cell] = tt.currPlayer
 			}
-			tt.Board = board
-			gameOver, winner := tt.isGameOver()
+			tt.State.Board = board                              // Aggiornato: assegna a .Board
+			gameOver, winnerSecret, winnerId := tt.isGameOver() // Aggiornato: gestisce i 3 ritorni
 			assert.True(t, gameOver)
-			assert.Equal(t, tt.players[tt.currPlayer], winner)
+			assert.Equal(t, tt.players[tt.currPlayer].Secret, winnerSecret)
+			assert.Equal(t, tt.currPlayer, winnerId)
 		}
 	})
-
 }
 
 func TestStart(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	r, _ := createGameWithPlayers()
 	stat := slices.Repeat([]int{0}, 9)
-	upd := []int{}
+	var upd T3State // Aggiornato: usa T3State
 
 	updatedStatus, nextPlayers, err := r.Start()
 	assert.Nil(t, err)
@@ -124,7 +125,7 @@ func TestStart(t *testing.T) {
 	for _, p := range []string{"1", "2"} {
 		err = json.Unmarshal(updatedStatus[p], &upd)
 		assert.Nil(t, err)
-		assert.Zero(t, slices.Compare(stat, upd))
+		assert.Zero(t, slices.Compare(stat, upd.Board)) // Compara .Board
 	}
 	assert.Equal(t, "1", nextPlayers[0])
 }
@@ -170,9 +171,9 @@ func TestGame(t *testing.T) {
 	assert.Equal(t, 1, len(pl))
 	assert.Equal(t, "1", pl[0])
 
-	endBoard := []int{}
-	json.Unmarshal(upd["1"], &endBoard)
-	assert.Zero(t, slices.Compare(expBoard, endBoard))
-	json.Unmarshal(upd["2"], &endBoard)
-	assert.Zero(t, slices.Compare(expBoard, endBoard))
+	var endState T3State // Aggiornato: usa T3State
+	json.Unmarshal(upd["1"], &endState)
+	assert.Zero(t, slices.Compare(expBoard, endState.Board))
+	json.Unmarshal(upd["2"], &endState)
+	assert.Zero(t, slices.Compare(expBoard, endState.Board))
 }

@@ -52,7 +52,15 @@ func (c *client) readPump(ctx context.Context, inbox chan<- msgPlayer) {
 		msg := msgPlayer{}
 		err = c.conn.ReadJSON(&msg)
 		if err != nil {
-			log.Errorf("ws read failed [%v]; %v", c.playerGUID, err)
+			if websocket.IsUnexpectedCloseError(err,
+				websocket.CloseNormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseAbnormalClosure,
+				websocket.CloseNoStatusReceived) {
+				log.Errorf("ws read failed [%v]; %v", c.playerGUID, err)
+			} else {
+				log.Infof("ws read closed cleanly [%v]", c.playerGUID)
+			}
 			break
 		}
 		if msg.PlayerGUID != c.playerGUID {

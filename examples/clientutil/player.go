@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/beevik/guid"
 	"github.com/komugi-dev/gamebox/client"
 	log "github.com/sirupsen/logrus"
 )
+
+func RandomPlayerName() string {
+	prefix := strings.Split(guid.NewString(), "-")[0]
+	return "player-" + prefix
+}
 
 func SetupPlayer(ctx context.Context, gbURL *url.URL, tablePrefix string, pName string) (*client.Player, error) {
 	var joinedTable client.Table

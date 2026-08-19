@@ -20,6 +20,12 @@ import (
 
 const gameboxURL = "http://localhost:8181/gamebox/v1"
 
+type T3State struct {
+	Board   []int          `json:"grid"`
+	Players map[int]string `json:"players,omitempty"` // map player index -> public name (to support "the winner is..." feature)
+	Winner  int            `json:"winner,omitempty"`  // board id of the winner
+}
+
 // drawBoard prints the game grid
 func drawBoard(board []int) {
 	// printing helper
@@ -41,7 +47,8 @@ func drawBoard(board []int) {
 	fmt.Printf("│ %s │ %s │ %s │\n", getSymbol(3), getSymbol(4), getSymbol(5))
 	fmt.Println("├───┼───┼───┤")
 	fmt.Printf("│ %s │ %s │ %s │\n", getSymbol(6), getSymbol(7), getSymbol(8))
-	fmt.Println("└───┴───┴───┘\n")
+	fmt.Println("└───┴───┴───┘")
+	fmt.Println()
 }
 
 // readUserInput reads the input.
@@ -109,17 +116,19 @@ func randomBotMove(board []int) int {
 // the default is human player.
 // "-bot" flag runs in auto mode.
 func main() {
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.ErrorLevel)
 
 	// human or bot
 	isBot := flag.Bool("bot", false, "Play randomly as a bot.")
 	flag.Parse()
 	switch *isBot {
 	case true:
-		fmt.Print("--- BOT player ---")
+		fmt.Println("--- BOT player ---")
 	case false:
 		fmt.Print("--- Human player ---")
 	}
+	playerName := clientutil.RandomPlayerName()
+	fmt.Printf("My name is %v\n", playerName)
 
 	// setup game
 	ctx := context.Background()
@@ -127,30 +136,46 @@ func main() {
 	if err != nil {
 		log.Fatalf("cannot parse gamebox URL; %v", err)
 	}
-	pl, err := clientutil.SetupPlayer(ctx, gbURL, "player1", "tic-tac-toe")
+	pl, err := clientutil.SetupPlayer(ctx, gbURL, "tic-tac-toe", playerName)
 	if err != nil {
 		log.Fatalf("error setup player; %v", err)
 	}
 
 	// game loop
+	state := T3State{}
+	justPlayed := false // enhance the UX
 	for {
 		typ, msg, winners, err := pl.GetMsg(ctx)
 		if err != nil {
-			log.Fatalf("error getting msg; %v", err)
+			log.Errorf("error getting msg; %v; unrecoverable, exiting...", err)
+			return
 		}
 		log.Infof("recv msg %v", string(msg))
-		board := []int{}
+
+		// error
+		if typ == client.MsgTypeError {
+			log.Errorf("error received; %v", string(msg))
+			continue
+		}
+
+		// move
+		err = json.Unmarshal(msg, &state)
+		if err != nil {
+			log.Errorf("wrong payload; %v", err)
+			continue
+		}
+
+		board := state.Board
+
 		switch typ {
+
 		case client.MsgTypeYourTurn:
 			log.Info("playing my turn!")
-			err = json.Unmarshal(msg, &board)
-			if err != nil {
-				log.Errorf("wrong payloed; %v", err)
-			}
 
 			var move int
 			if *isBot {
 				move = randomBotMove(board)
+				fmt.Printf("BOT moves to cell %v\n", move)
 			} else {
 				move = readUserInput(board)
 			}
@@ -158,22 +183,22 @@ func main() {
 			moveJSON, _ := json.Marshal(move)
 			err = pl.SendMsg(ctx, moveJSON)
 			if err != nil {
-				log.Errorf("Errore invio mossa: %v", err)
+				log.Errorf("Error sending the move: %v", err)
 			}
+			justPlayed = true
 
 		case client.MsgTypeState:
-			log.Info("updating the board!")
-			err = json.Unmarshal(msg, &board)
-			if err != nil {
-				log.Errorf("wrong payloed; %v", err)
+			if !justPlayed {
+				fmt.Println("Updating the board...")
+			} else {
+				justPlayed = false
 			}
 			drawBoard(board)
 
 		case client.MsgTypeGameOver:
 			log.Info("updating the board!")
-			err = json.Unmarshal(msg, &board)
-			if err != nil {
-				log.Errorf("wrong payloed; %v", err)
+			if !justPlayed {
+				fmt.Println("Updating the board...")
 			}
 			drawBoard(board)
 
@@ -184,12 +209,10 @@ func main() {
 			if winners[0] == pl.Guid {
 				fmt.Print("\n=== You win! ===\n")
 			} else {
-				fmt.Print("\n+++ You loose! +++\n")
+				fmt.Print("\n+++ You lose! +++\n")
+				fmt.Printf("\nThe winner is %v\n", state.Players[state.Winner])
 			}
 			return
-
-		case client.MsgTypeError:
-			log.Errorf("error received; %v", string(msg))
 		}
 	}
 }

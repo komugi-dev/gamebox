@@ -9,8 +9,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO : write example
-
 const numPlayers = 2
 
 var winChecks = [8][3]int{
@@ -24,8 +22,14 @@ type T3Player struct {
 	Public string
 }
 
+type T3State struct {
+	Board   []int          `json:"grid"`
+	Players map[int]string `json:"players,omitempty"` // map player index -> public name (to support "the winner is..." feature)
+	Winner  int            `json:"winner,omitempty"`  // board id of the winner
+}
+
 type T3Logic struct {
-	Board      []int `json:"grid"`
+	State      T3State
 	players    map[int]T3Player
 	currPlayer int
 	mu         sync.RWMutex
@@ -33,8 +37,12 @@ type T3Logic struct {
 
 func CreateT3() gamebox.GameRules {
 	t3Logic := T3Logic{
-		Board:      make([]int, 9),
-		players:    make(map[int]T3Player, 0),
+		State: T3State{
+			Board:   make([]int, 9),
+			Players: make(map[int]string, 2),
+			Winner:  0,
+		},
+		players:    make(map[int]T3Player, 2),
 		currPlayer: 1,
 	}
 
@@ -47,16 +55,18 @@ func (t *T3Logic) nextPlayer() (playerIdx int) {
 }
 
 func (t *T3Logic) updatedStatus() (updatedStatus map[string]json.RawMessage, err error) {
-	// get the board
-	jsonGrid, err := json.Marshal(t.Board)
+	// get the status
+	jsonState, err := json.Marshal(t.State)
 	if err != nil {
 		return
 	}
 
 	// update status
+	// in this game, the status can be the same for all the players;
+	// but every player can receive a tailored view of the status if needed
 	updatedStatus = make(map[string]json.RawMessage, len(t.players))
 	for _, v := range t.players {
-		updatedStatus[v.Secret] = jsonGrid
+		updatedStatus[v.Secret] = jsonState
 	}
 	return
 }
@@ -68,35 +78,37 @@ func (t *T3Logic) move(playerIdx int, move int) error {
 	if playerIdx != -1 && playerIdx != 1 {
 		return fmt.Errorf("wrong playerIdx: %v", playerIdx)
 	}
-	if t.Board[move] != 0 {
+	if t.State.Board[move] != 0 {
 		return fmt.Errorf("cell already occupied")
 	}
-	t.Board[move] = playerIdx
+	t.State.Board[move] = playerIdx
 	return nil
 }
 
-func (t *T3Logic) isGameOver() (gameOver bool, winner string) {
+// is GameOver() checks if a game can continue; it returns the winner in case it's done
+func (t *T3Logic) isGameOver() (gameOver bool, winnerSecret string, winnerId int) {
 
 	// check winner
 	winCond := 3 * t.currPlayer
 	for _, i := range winChecks {
 		partial := 0
 		for _, cell := range i {
-			partial += t.Board[cell]
+			partial += t.State.Board[cell]
 		}
 		if partial == winCond {
-			return true, t.players[t.currPlayer].Secret
+			return true, t.players[t.currPlayer].Secret, t.currPlayer
 		}
 	}
 
 	// check draw
 	gameOver = true
-	for _, cell := range t.Board {
+	for _, cell := range t.State.Board {
 		if cell == 0 {
 			gameOver = false
-			break
+			return
 		}
 	}
+
 	return
 }
 
@@ -113,6 +125,7 @@ func (t *T3Logic) AddPlayer(playerId string, playerName string) error {
 		Secret: playerId,
 		Public: playerName,
 	}
+	t.State.Players[t.currPlayer] = playerName
 	t.nextPlayer()
 
 	return nil
@@ -165,20 +178,18 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	if err != nil {
 		return
 	}
-	log.Debugf("board:%v", t.Board)
+	log.Debugf("board:%v", t.State)
+
+	// check winner / draw
+	gameOver, winnerSecret, winnerBoardId := t.isGameOver()
+	if len(winnerSecret) > 0 {
+		nextPlayers = append(nextPlayers, winnerSecret)
+	}
+	t.State.Winner = winnerBoardId
 
 	// update the status
 	updatedStatus, err = t.updatedStatus()
-	if err != nil {
-		return
-	}
-
-	// check winner / draw
-	gameOver, winner := t.isGameOver()
-	if len(winner) > 0 {
-		nextPlayers = append(nextPlayers, winner)
-	}
-	if gameOver {
+	if err != nil || gameOver {
 		return
 	}
 
