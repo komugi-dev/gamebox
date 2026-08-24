@@ -19,6 +19,13 @@ type InstanceStatus struct {
 	Extended json.RawMessage `json:"extended,omitempty"` // extended info
 }
 
+// GameUpdate groups the fields returned by the interface functions.
+type GameUpdate struct {
+	Status      map[string]json.RawMessage
+	NextPlayers []string
+	IsGameOver  bool
+}
+
 // GameRules is the interface that a game engine must implement to be hosted by GameBox.
 type GameRules interface {
 	// Info() returns information about the game.
@@ -29,15 +36,21 @@ type GameRules interface {
 	// - secret is the secret identifier created by the service
 	// - public contains public data about the player
 	// Developers can use the public string at their own convenience.
-	AddPlayer(secret string, public string) error
+	// If the game allows late-joins, it should return the updated state.
+	AddPlayer(secret string, public string) (GameUpdate, error)
+
+	// RemovePlayer() deletes from the game a player who explicitly quits the table.
+	// The game logic decides how to handle this event, e.g.:
+	// - continuing the game
+	// - putting the game in stand-by and waiting for a new player to join
+	// - declaring GameOver and assigning the victory to other player(s)
+	RemovePlayer(secret string) (GameUpdate, error)
 
 	// Start() initializes the game.
 	// It returns the initial state views for the players and the list of players
 	// who are expected to make the first move.
 	// The specific error returned depends on the game engine implementation.
-	Start() (updatedStatus map[string]json.RawMessage,
-		nextPlayers []string,
-		err error)
+	Start() (GameUpdate, error)
 
 	// Play() processes a move from a specific player.
 	// It returns a map with the updated state view for each player, natively supporting hidden information.
@@ -51,10 +64,6 @@ type GameRules interface {
 	// It is the engine's responsibility to manage the follow-up.
 	// Suggested semantics for nextPlayers and isGameOver:
 	// - isGameOver is false: the game continues, nextPlayers contains the player(s) whose move is expected
-	// - isGameOver is true: the game is over; nextPlayers contains the winner(s). If empyt, the game ends in a draw.
-	Play(playerId string, move json.RawMessage) (
-		updatedStatus map[string]json.RawMessage,
-		nextPlayers []string,
-		isGameOver bool,
-		err error)
+	// - isGameOver is true: the game is over; nextPlayers contains the winner(s). If empty, the game ends in a draw.
+	Play(playerId string, move json.RawMessage) (GameUpdate, error)
 }
