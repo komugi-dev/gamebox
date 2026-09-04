@@ -49,10 +49,8 @@ type msgPlayer struct {
 // CreatePlayer() creates a new player that interacts with the game.
 func CreatePlayer(name string, s *Session) *Player {
 	return &Player{
-		Name:   name,
-		ss:     s,
-		inbox:  make(chan msgPlayer, 256),
-		outbox: make(chan msgPlayer, 256),
+		Name: name,
+		ss:   s,
 	}
 }
 
@@ -185,6 +183,10 @@ func (p *Player) wsConn(ctx context.Context, secret string) error {
 	if p.cli != nil {
 		p.cli.dispose()
 	}
+
+	p.inbox = make(chan msgPlayer, 256)
+	p.outbox = make(chan msgPlayer, 256)
+
 	wsCtx, canc := context.WithCancel(context.Background())
 	p.cli = &client{
 		conn:       conn,
@@ -269,11 +271,16 @@ func (p *Player) Quit(ctx context.Context) error {
 // GetMsg() get messages from the gamebox service.
 // The function blocs until a message is received or when the context is canceled.
 func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, []string, error) {
+
+	if p.inbox == nil {
+		return "", nil, nil, fmt.Errorf("cannot get msg; player not connected: call Join() or Rejoin() first")
+	}
+
 	select {
 	case msg, ok := <-p.inbox:
 		if !ok {
 			log.Infof("inbox chan closed, exiting")
-			return "", nil, nil, nil
+			return "", nil, nil, fmt.Errorf("inbox closed (connection lost?)")
 		}
 		if msg.Type == MsgTypeYourTurn {
 			p.turnId = msg.TurnID
@@ -286,6 +293,11 @@ func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, []string
 
 // SendMsg() sends messages to the gamebox service.
 func (p *Player) SendMsg(ctx context.Context, msg json.RawMessage) error {
+
+	if p.inbox == nil {
+		return fmt.Errorf("cannot send msg; player not connected: call Join() or Rejoin() first")
+	}
+
 	mp := msgPlayer{
 		Type:       MsgTypePlay,
 		Payload:    msg,

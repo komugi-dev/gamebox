@@ -46,8 +46,14 @@ func (c *client) writePump(ctx context.Context, outbox <-chan msgPlayer) {
 // readPump receives messages from the networs and writes them to inbox
 func (c *client) readPump(ctx context.Context, inbox chan<- msgPlayer) {
 	var err error
-	//defer close(inbox) // TODO: clean disconnection when the service goes down
-	defer c.conn.Close()
+
+	// closing the chan so it can unblock the GetMsg() loop
+	// chan and socket are recreated in the rejoin
+	defer func() {
+		c.conn.Close()
+		close(inbox)
+	}()
+
 	for {
 		msg := msgPlayer{}
 		err = c.conn.ReadJSON(&msg)

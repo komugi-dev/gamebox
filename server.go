@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	apiPrefix = "/gamebox/v1"
+	apiPrefix       = "/gamebox/v1"
+	shutdownTimeout = 5 * time.Second
 )
 
 type serverConf struct {
@@ -66,7 +67,7 @@ func (s *server) run(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Info("Shutting down server...")
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
 		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {

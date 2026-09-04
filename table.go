@@ -16,6 +16,9 @@ type MsgType string
 
 const (
 	MsgTypeWelcome  MsgType = "welcome"
+	MsgTypeJoin     MsgType = "join"
+	MsgTypeQuit     MsgType = "quit"
+	MsgTypeStart    MsgType = "start"
 	MsgTypePlay     MsgType = "play"
 	MsgTypeState    MsgType = "state"
 	MsgTypeYourTurn MsgType = "yourturn"
@@ -29,6 +32,8 @@ type msgPlayer struct {
 	Winners    []string        `json:"winners,omitempty"`
 	TurnID     string          `json:"turn_id"`
 	Payload    json.RawMessage `json:"payload"`
+
+	reply chan error // game loop can reply synchronously to rest methods
 }
 
 type tableSummary struct {
@@ -46,6 +51,7 @@ type table struct {
 	mu       sync.RWMutex
 }
 
+// createTable creates a new table object and starts the event loop routine
 func createTable(tableName string, r GameRules) *table {
 	log.Infof("creating table %v", tableName)
 	t := table{
@@ -55,7 +61,7 @@ func createTable(tableName string, r GameRules) *table {
 		},
 		rules:    r,
 		players:  make(map[string]player),
-		inbox:    make(chan msgPlayer),
+		inbox:    make(chan msgPlayer, 256),
 		outbox:   make(map[string]chan msgPlayer),
 		turnGUID: make(map[string]string),
 	}
@@ -148,7 +154,6 @@ func (t *table) sendYourTurn(playerGUID string, state json.RawMessage) error {
 	}
 }
 
-// TODO: check
 func (t *table) notifyGameOver(updatedStatus map[string]json.RawMessage, winners []string) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -262,60 +267,48 @@ func (t *table) deletePlayer(playerGUID string) {
 	}
 }
 
-func (t *table) isValidTurn(playerGUID string, turnGUID string) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	tg, ok := t.turnGUID[playerGUID]
-	valid := ok && tg == turnGUID
-	if valid {
-		delete(t.turnGUID, turnGUID)
-	}
-	return valid
-}
-
-func (t *table) startLoop(updatedStatus map[string]json.RawMessage, nextPlayers []string) {
-	log.Infof("startLoop: Table %s starting...", t.summary.TableGUID)
-
-	t.updatePlayers(updatedStatus, nextPlayers)
-
-	// event loop
+func (t *table) eventLoop() {
 	for {
 		msg, ok := <-t.inbox
 		if !ok {
-			log.Warningf("no more msg; table: %v", t.summary.TableGUID)
+			log.Info("inbox chan closed, eventLoop exiting...")
 			break
 		}
-		if !t.isValidTurn(msg.PlayerGUID, msg.TurnID) {
-			log.Warningf("invalid id in msg; table: %v; player: %v; turnGuid: %v",
-				t.summary.TableGUID, msg.PlayerGUID, msg.TurnID)
-			continue
+
+		var update GameUpdate
+		var err error
+
+		switch msg.Type {
+		case MsgTypeJoin:
+			update, err = t.rules.AddPlayer(msg.PlayerGUID, string(msg.Payload))
+		case MsgTypeQuit:
+			update, err = t.rules.RemovePlayer(msg.PlayerGUID)
+		case MsgTypeStart:
+			update, err = t.rules.Start()
+		case MsgTypePlay:
+			update, err = t.rules.Play(msg.PlayerGUID, msg.Payload)
 		}
 
-		// player sent a valid message
-		updatedStatus, nextPlayers, isGameOver, err := t.rules.Play(msg.PlayerGUID, msg.Payload)
-		if err != nil {
-			t.sendErrorTo(msg.PlayerGUID, err.Error())
-			continue
+		// send the answer to a sync call
+		if msg.reply != nil {
+			msg.reply <- err
 		}
 
-		// game over or continue
-		// TODO: check
-		if isGameOver {
-			t.notifyGameOver(updatedStatus, nextPlayers)
-			log.Infof("Game Over at table %s", t.summary.TableGUID)
-			break
+		// update clients
+		if err == nil {
+			if update.IsGameOver {
+				t.notifyGameOver(update.Status, update.NextPlayers)
+				return
+			} else {
+				t.updatePlayers(update.Status, update.NextPlayers)
+			}
 		} else {
-			t.updatePlayers(updatedStatus, nextPlayers)
+			// update clients only in case of async (wsocket) messages
+			if msg.reply == nil {
+				t.sendErrorTo(msg.PlayerGUID, err.Error())
+			}
 		}
 	}
-
-	// players clean up
-	t.mu.Lock()
-	for _, o := range t.outbox {
-		close(o)
-	}
-	t.mu.Unlock()
 }
 
 func (t *table) Dispose() {

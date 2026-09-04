@@ -1,7 +1,6 @@
 package gamebox
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -60,6 +59,18 @@ func (g *gameRegistry) createTable(tableName string) string {
 	g.mu.Lock()
 	g.registry[t.summary.TableGUID] = t
 	g.mu.Unlock()
+
+	// start the event loop
+	// prepare for a cleanup after the routine exits
+	go func() {
+		t.eventLoop()
+
+		g.mu.Lock()
+		delete(g.registry, t.summary.TableGUID)
+		g.mu.Unlock()
+
+		log.Infof("Table %s removed from registry (Game Over)", t.summary.TableGUID)
+	}()
 
 	return t.summary.TableGUID
 }
@@ -172,12 +183,28 @@ func (g *gameRegistry) seatPlayer(p player, c *client) (tableInbox chan<- msgPla
 	}
 	tableInbox = table.inbox
 
-	err = table.rules.AddPlayer(p.guid, p.name)
-	if err != nil {
-		err = fmt.Errorf("AddPlayer failed; table [%v]; player [%v]; err [%w]", p.tableGUID, p.guid, err)
-		return nil, nil, err
+	// check join / rejoin
+	table.mu.RLock()
+	_, isRejoin := table.players[p.guid]
+	table.mu.RUnlock()
+
+	if !isRejoin {
+		replyChan := make(chan error, 1)
+		tableInbox <- msgPlayer{
+			Type:       MsgTypeJoin,
+			PlayerGUID: p.guid,
+			Payload:    []byte(p.name),
+			reply:      replyChan,
+		}
+
+		err = <-replyChan
+		if err != nil {
+			err = fmt.Errorf("AddPlayer rejected by game logic for player [%v]: %w", p.guid, err)
+			return nil, nil, err
+		}
 	}
 
+	// eventually, complete the initialization
 	playerOutbox = table.setPlayer(p, c)
 	return tableInbox, playerOutbox, nil
 }
@@ -195,11 +222,29 @@ func (g *gameRegistry) quitTable(p player) error {
 		return fmt.Errorf(PlayerNotFound, p.guid)
 	}
 
+	// delete wsocket, readPump and writePump
 	if player.client != nil {
 		player.client.dispose()
 	}
-
 	t.deletePlayer(p.guid)
+
+	// send the answer to the reply chan
+	replyChan := make(chan error, 1)
+
+	select {
+	case t.inbox <- msgPlayer{
+		Type:       MsgTypeQuit,
+		PlayerGUID: p.guid,
+		reply:      replyChan,
+	}:
+		err := <-replyChan
+		if err != nil {
+			return fmt.Errorf("game logic error on quit: %w", err)
+		}
+
+	default:
+		log.Warnf("inbox full, dropping quit message for %s (table %s)", p.guid, p.tableGUID)
+	}
 
 	return nil
 }
@@ -241,25 +286,22 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 
 	log.Infof("startTable: Table %s starting...", t.summary.TableGUID)
 
-	// init the game
-	updatedStatus, nextPlayers, err := t.rules.Start()
-	if err != nil {
-		errMsg := fmt.Sprintf(StartError, t.summary.TableGUID, err)
-		log.Error(errMsg)
-		return errors.New(errMsg)
+	replyChan := make(chan error, 1)
+
+	select {
+	case t.inbox <- msgPlayer{
+		Type:  MsgTypeStart,
+		reply: replyChan,
+	}:
+		err := <-replyChan
+		if err != nil {
+			return fmt.Errorf("start failed: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("table inbox full, cannot start table %s", tableGUID)
 	}
 
-	go func() {
-		t.startLoop(updatedStatus, nextPlayers)
-
-		// the game is done, clean up the table
-		t.Dispose()
-
-		g.mu.Lock()
-		delete(g.registry, tableGUID)
-		g.mu.Unlock()
-
-	}()
 	return nil
 }
 

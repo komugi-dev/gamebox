@@ -112,13 +112,17 @@ func (t *T3Logic) isGameOver() (gameOver bool, winnerSecret string, winnerId int
 	return
 }
 
-func (t *T3Logic) AddPlayer(playerId string, playerName string) error {
+func (t *T3Logic) AddPlayer(playerId string, playerName string) (gamebox.GameUpdate, error) {
 	log.Infof("ttt request to add player [%v][%v]", playerId, playerName)
+	gu := gamebox.GameUpdate{
+		IsGameOver: false,
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if len(t.players) == numPlayers {
-		return fmt.Errorf("board full")
+		return gu, fmt.Errorf("board full")
 	}
 
 	t.players[t.currPlayer] = T3Player{
@@ -128,33 +132,72 @@ func (t *T3Logic) AddPlayer(playerId string, playerName string) error {
 	t.State.Players[t.currPlayer] = playerName
 	t.nextPlayer()
 
-	return nil
+	var err error
+	gu.Status, err = t.updatedStatus()
+	if err != nil {
+		return gu, err
+	}
+
+	return gu, nil
 }
 
-func (t *T3Logic) Start() (updatedStatus map[string]json.RawMessage,
-	nextPlayers []string,
-	err error) {
+// when a player abandons the game, it just ends
+func (t *T3Logic) RemovePlayer(secret string) (gamebox.GameUpdate, error) {
+	log.Warningf("player %v quit the game; dropping the table", secret)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	updatedStatus, err = t.updatedStatus()
+	gu := gamebox.GameUpdate{
+		IsGameOver: true,
+	}
+
+	// find the survivor to assign the victory
+	var winnerSecret string
+	var winnerId int
+	for id, p := range t.players {
+		if p.Secret != secret {
+			winnerSecret = p.Secret
+			winnerId = id
+		}
+	}
+
+	if winnerSecret != "" {
+		gu.NextPlayers = append(gu.NextPlayers, winnerSecret)
+		t.State.Winner = winnerId
+	}
+
+	gu.Status, _ = t.updatedStatus()
+
+	return gu, nil
+}
+
+func (t *T3Logic) Start() (gamebox.GameUpdate, error) {
+	gu := gamebox.GameUpdate{
+		IsGameOver: false,
+	}
+	var err error
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	gu.Status, err = t.updatedStatus()
 	if err != nil {
-		return nil, nil, err
+		return gu, err
 	}
 
 	// get next player
-	nextPlayers = append(nextPlayers, t.players[t.currPlayer].Secret)
-	log.Debugf("ttt start - players[%v]; next[%v]", t.players, nextPlayers)
+	gu.NextPlayers = append(gu.NextPlayers, t.players[t.currPlayer].Secret)
+	log.Debugf("ttt start - players[%v]; next[%v]", t.players, gu.NextPlayers)
 
-	return
+	return gu, nil
 }
 
-func (t *T3Logic) Play(playerId string, move json.RawMessage) (
-	updatedStatus map[string]json.RawMessage,
-	nextPlayers []string,
-	gameOver bool,
-	err error) {
+func (t *T3Logic) Play(playerId string, move json.RawMessage) (gamebox.GameUpdate, error) {
+	var err error
+	gu := gamebox.GameUpdate{
+		IsGameOver: false,
+	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -163,7 +206,7 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	pId := t.players[t.currPlayer].Secret
 	if pId != playerId {
 		err = fmt.Errorf("wrong player, expected %v, got %v", pId, playerId)
-		return
+		return gu, err
 	}
 
 	// apply the move
@@ -171,32 +214,33 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (
 	err = json.Unmarshal(move, &m)
 	if err != nil {
 		err = fmt.Errorf("unmarshal failed; player [%v]; %w", playerId, err)
-		return
+		return gu, err
 	}
 	log.Debugf("pl:%v; move:%v", playerId, m)
 	err = t.move(t.currPlayer, m)
 	if err != nil {
-		return
+		return gu, err
 	}
 	log.Debugf("board:%v", t.State)
 
 	// check winner / draw
 	gameOver, winnerSecret, winnerBoardId := t.isGameOver()
 	if len(winnerSecret) > 0 {
-		nextPlayers = append(nextPlayers, winnerSecret)
+		gu.NextPlayers = append(gu.NextPlayers, winnerSecret)
 	}
 	t.State.Winner = winnerBoardId
 
 	// update the status
-	updatedStatus, err = t.updatedStatus()
+	gu.Status, err = t.updatedStatus()
 	if err != nil || gameOver {
-		return
+		gu.IsGameOver = true
+		return gu, err
 	}
 
 	// continue the game
-	nextPlayers = append(nextPlayers, t.players[t.nextPlayer()].Secret)
+	gu.NextPlayers = append(gu.NextPlayers, t.players[t.nextPlayer()].Secret)
 
-	return
+	return gu, nil
 }
 
 func (t *T3Logic) Info() gamebox.InstanceStatus {

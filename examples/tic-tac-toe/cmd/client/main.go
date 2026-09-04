@@ -9,8 +9,10 @@ import (
 	"math/rand/v2"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 
@@ -113,6 +115,33 @@ func randomBotMove(board []int) int {
 	return move
 }
 
+// setupGame() instantiates a new tic-tac-toe player
+func setupGame(ctx context.Context, gameboxURL string, playerName string) (*client.Player, error) {
+
+	// setup player
+	gbURL, err := url.Parse(gameboxURL)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse gamebox URL; %w", err)
+	}
+	pl, err := clientutil.SetupPlayer(ctx, gbURL, "tic-tac-toe", playerName)
+	if err != nil {
+		return nil, fmt.Errorf("error setup player; %w", err)
+
+	}
+
+	// handle graceful disconnection
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\nquitting the table...")
+		pl.Quit(ctx)
+		os.Exit(0)
+	}()
+
+	return pl, nil
+}
+
 // the default is human player.
 // "-bot" flag runs in auto mode.
 func main() {
@@ -125,20 +154,16 @@ func main() {
 	case true:
 		fmt.Println("--- BOT player ---")
 	case false:
-		fmt.Print("--- Human player ---")
+		fmt.Println("--- Human player ---")
 	}
 	playerName := clientutil.RandomPlayerName()
 	fmt.Printf("My name is %v\n", playerName)
 
 	// setup game
 	ctx := context.Background()
-	gbURL, err := url.Parse(gameboxURL)
+	pl, err := setupGame(ctx, gameboxURL, playerName)
 	if err != nil {
-		log.Fatalf("cannot parse gamebox URL; %v", err)
-	}
-	pl, err := clientutil.SetupPlayer(ctx, gbURL, "tic-tac-toe", playerName)
-	if err != nil {
-		log.Fatalf("error setup player; %v", err)
+		log.Fatalf("failed to setup the game, quitting... [%v]", err)
 	}
 
 	// game loop
