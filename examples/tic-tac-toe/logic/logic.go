@@ -26,7 +26,28 @@ type T3State struct {
 	Board   []int          `json:"grid"`
 	Players map[int]string `json:"players,omitempty"` // map player index -> public name (to support "the winner is..." feature)
 	Winner  int            `json:"winner,omitempty"`  // board id of the winner
+	Phase   string         `json:"phase,omitempty"`   // the phase of the game
+	Tag     string         `json:"tag,omitempty"`     // the tag associated with the message
 }
+
+// game phases and tags demonstrates how the game logic
+// encapsulates information for the GUI
+
+// the game phases
+const (
+	Lobby   = "lobby"   // waiting for players to join
+	Playing = "playing" // playing
+	Done    = "done"    // game done
+)
+
+// message tag (extra info for the client)
+const (
+	PlayerJoined = "player_joined"
+	PlayerLeft   = "player_left"
+	GameStarted  = "game_started"
+	Move         = "move"
+	Quit         = "quit"
+)
 
 type T3Logic struct {
 	State      T3State
@@ -41,6 +62,8 @@ func CreateT3() gamebox.GameRules {
 			Board:   make([]int, 9),
 			Players: make(map[int]string, 2),
 			Winner:  0,
+			Phase:   Lobby,
+			Tag:     "",
 		},
 		players:    make(map[int]T3Player, 2),
 		currPlayer: 1,
@@ -131,6 +154,7 @@ func (t *T3Logic) AddPlayer(playerId string, playerName string) (gamebox.GameUpd
 	}
 	t.State.Players[t.currPlayer] = playerName
 	t.nextPlayer()
+	t.State.Tag = PlayerJoined
 
 	var err error
 	gu.Status, err = t.updatedStatus()
@@ -167,6 +191,7 @@ func (t *T3Logic) RemovePlayer(secret string) (gamebox.GameUpdate, error) {
 		t.State.Winner = winnerId
 	}
 
+	t.State.Tag = PlayerLeft
 	gu.Status, _ = t.updatedStatus()
 
 	return gu, nil
@@ -181,6 +206,8 @@ func (t *T3Logic) Start() (gamebox.GameUpdate, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.State.Tag = GameStarted
+	t.State.Phase = Playing
 	gu.Status, err = t.updatedStatus()
 	if err != nil {
 		return gu, err
@@ -230,6 +257,13 @@ func (t *T3Logic) Play(playerId string, move json.RawMessage) (gamebox.GameUpdat
 	}
 	t.State.Winner = winnerBoardId
 
+	if gameOver {
+		t.State.Phase = Done
+		t.State.Tag = Quit
+	} else {
+		t.State.Tag = Move
+	}
+
 	// update the status
 	gu.Status, err = t.updatedStatus()
 	if err != nil || gameOver {
@@ -249,11 +283,7 @@ func (t *T3Logic) Info() gamebox.InstanceStatus {
 
 	i := gamebox.InstanceStatus{
 		Players: len(t.players),
-	}
-
-	i.State = "lobby"
-	if i.Players == 2 {
-		i.State = "full"
+		State:   t.State.Phase,
 	}
 
 	return i

@@ -22,10 +22,15 @@ import (
 
 const gameboxURL = "http://localhost:8181/gamebox/v1"
 
+const (
+	PlayerJoined = "player_joined"
+)
+
 type T3State struct {
 	Board   []int          `json:"grid"`
 	Players map[int]string `json:"players,omitempty"` // map player index -> public name (to support "the winner is..." feature)
 	Winner  int            `json:"winner,omitempty"`  // board id of the winner
+	Tag     string         `json:"tag,omitempty"`
 }
 
 // drawBoard prints the game grid
@@ -213,6 +218,10 @@ func main() {
 			justPlayed = true
 
 		case client.MsgTypeState:
+			if state.Tag == PlayerJoined {
+				fmt.Println("Opponent joined...")
+				break
+			}
 			if !justPlayed {
 				fmt.Println("Updating the board...")
 			} else {
