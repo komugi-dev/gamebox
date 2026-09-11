@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: Gamebox Table API
+  version: 1.0.1
+  description: REST API for game table management, with support for creating a websocket for gameplay.
+servers:
+  - url: http://localhost:8080/gamebox/v1
+paths:
+  /tables:
+    post:
+      summary: Creates a new table
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_name:
+                  type: string
+                  description: The name of the game table other players can join.
+              required:
+                - table_name
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  table_guid:
+                    type: string
+    get:
+      summary: List tables
+      responses:
+        '200':
+          description: Returns a list of the available tables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    table_name:
+                      type: string
+                    table_guid:
+                      type: string
+
+  /tables/{table_guid}/join:
+    post:
+      summary: Join a table
+      description: |
+        The player wants to join a table, it sends the 'player_name' and receive a 'websocket_secret' valid once to open the WS connection.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_name:
+                  type: string
+                  description: Used only by new players
+              required:
+                - player_name
+      responses:
+        '200':
+          description: Returns the secret ticket to open the WebSocket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  websocket_secret:
+                    type: string
+                    description: Include this in the querystring GET /game/join?secret=...
+
+
+  /tables/{table_guid}/rejoin:
+    post:
+      summary: Rejoin a table
+      description: |
+        The player wants to reconnect to a websocket that is not responding.
+        As a payload, it send the 'player_guid' received after joining the table.
+        The server returns a 'websocket_secret' valid once to open the WS connection.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_guid:
+                  type: string
+                  description: The guid returned by the join request.
+              required:
+                - player_guid
+      responses:
+        '200':
+          description: Returns the secret ticket to open the WebSocket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  websocket_secret:
+                    type: string
+                    description: Include this in the querystring GET /game/join?secret=...
+
+
+  /tables/{table_guid}/quit:
+    post:
+      summary: Quit the table
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_guid:
+                  type: string
+              required:
+                - player_guid
+      responses:
+        '204':
+          description: Successfully exited.
+
+  /tables/{table_guid}/players:
+    get:
+      summary: List of the players on the table.
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of the players names.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /tables/{table_guid}/start:
+    post:
+      summary: Start the game
+      parameters:
+        - name: table_guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Game successfully started. The server will send "state" and "yourturn" messages via WebSocket.
+        '400':
+          description: The game cannot start.
+
+  /ws:
+    get:
+      summary: Open the WebSocket connection
+      description: |
+        Upgrades the HTTP connection to a WebSocket protocol.
+        Requires a valid 'secret' ticket obtained via POST /join or POST /rejoin.
+        The endpoint does not return a JSON body, but upgrades the connection and starts the Game API message flow.
+      parameters:
+        - name: secret
+          in: query
+          required: true
+          description: The one-time ticket to authorize the connection.
+          schema:
+            type: string
+      responses:
+        '101':
+          description: Switching Protocols. WebSocket successfully opened.
+        '401':
+          description: Unauthorized. The secret is invalid, missing, or already used.

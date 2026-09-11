@@ -1,0 +1,81 @@
+package gamebox
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	apiPrefix       = "/gamebox/v1"
+	shutdownTimeout = 5 * time.Second
+)
+
+type serverConf struct {
+	port              int
+	readHeaderTimeout time.Duration
+	readTimeout       time.Duration
+	writeTimeout      time.Duration
+	idleTimeout       time.Duration
+}
+
+type server struct {
+	conf       serverConf
+	httpServer *http.Server
+}
+
+func newServer(c serverConf, registry *gameRegistry) (*server, error) {
+	r := mux.NewRouter()
+
+	rPath := r.PathPrefix(apiPrefix).Subrouter()
+
+	api := newAPI(registry)
+
+	registerAPIRoutes(rPath, api)
+
+	return &server{
+		conf: c,
+		httpServer: &http.Server{
+			Addr:              fmt.Sprintf(":%v", c.port),
+			Handler:           r,
+			ReadHeaderTimeout: c.readHeaderTimeout,
+			ReadTimeout:       c.readTimeout,
+			WriteTimeout:      c.writeTimeout,
+			IdleTimeout:       c.idleTimeout,
+		},
+	}, nil
+}
+
+// run starts the HTTP server and handles graceful shutdown
+func (s *server) run(ctx context.Context) error {
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		log.Infof("Server listening on port %s", s.httpServer.Addr)
+		serverErrors <- s.httpServer.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if err != http.ErrServerClosed {
+			return fmt.Errorf("server startup error: %w", err)
+		}
+	case <-ctx.Done():
+		log.Info("Shutting down server...")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+			_ = s.httpServer.Close()
+			return fmt.Errorf("graceful shutdown failed: %w", err)
+		}
+	}
+
+	log.Info("Server exited gracefully")
+	return nil
+}
