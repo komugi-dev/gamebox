@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- MOCK LOGIC PER IL REGISTRY ---
 type MockLogic struct{}
 
 func (m *MockLogic) Info() InstanceStatus                             { return InstanceStatus{} }
