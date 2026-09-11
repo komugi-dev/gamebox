@@ -5,7 +5,7 @@ go 1.25.1
 require github.com/sirupsen/logrus v1.9.4
 
 require (
-	github.com/komugi-dev/gamebox v0.0.0-20260713100417-d91b8aec48db
+	github.com/komugi-dev/gamebox v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
