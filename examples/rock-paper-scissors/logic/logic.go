@@ -10,66 +10,54 @@ import (
 	"github.com/komugi-dev/gamebox"
 )
 
+// --- dominium constants ---
+
+// Rock -> Scissor -> Paper -> Rock
+
 const (
 	Rock = iota
 	Paper
 	Scissor
 )
 
-// Rock -> Scissor -> Paper -> Rock
-
 // player's choice
 type choice int
 
-// play result
-const (
-	win = iota
-	lose
-	draw
-)
+// --- payloads ---
 
-type result int
-
-func (c choice) isWinner(other choice) result {
-	if c == other {
-		return draw
-	}
-	if c == Rock && other == Scissor ||
-		c == Scissor && other == Paper ||
-		c == Paper && other == Rock {
-		return win
-	}
-	return lose
+type Move struct {
+	Choice int `json:"choice"`
 }
+
+type TurnResult struct {
+	Self      string   `json:"my-id"`     // secret id if the player passed the turn, empty otherwise
+	Survivors []string `json:"survivors"` // the public names of the survivors
+}
+
+type MsgPlayerPayload struct {
+	Joiner string     `json:"joiner"`
+	Leaver string     `json:"leaver"`
+	Turn   TurnResult `json:"turn"`
+}
+
+// --- internal structures ---
 
 type player struct {
 	public string
 	secret string
 }
 
-type NewPlayer struct {
-	Name string `json:"name"`
-}
-
-// "R", "S", "P"
-type Move struct {
-	Choice int `json:"choice"`
-}
-
-// message after turn
-type TurnResult struct {
-	Self      string   `json:"my-id"`     // secret id if the player passed the turn, empty otherwise
-	Survivors []string `json:"survivors"` // the public names of the survivors
-}
-
 const StatusLobby = "lobby"
 const StatusPlay = "play"
 
+// --- ctor and state machine ---
+
 type RPSLogic struct {
-	state    string
-	currTurn int
-	players  map[string]player
-	moves    map[string]choice
+	state         string
+	currTurn      int
+	players       map[string]player // starting players
+	inGamePlayers map[string]player // still actively playng
+	moves         map[string]choice // turn's moves
 }
 
 func CreateRPSLogic() *RPSLogic {
@@ -82,33 +70,13 @@ func CreateRPSLogic() *RPSLogic {
 	return &rps
 }
 
+// --- game functions ---
+
 func (rps *RPSLogic) Info() gamebox.InstanceStatus {
 	return gamebox.InstanceStatus{
 		State:   rps.state,
 		Players: len(rps.players),
 	}
-}
-
-func (rps *RPSLogic) updateCurrPlayers() (gamebox.GameUpdate, error) {
-	currPlayers := []NewPlayer{}
-	for _, v := range rps.players {
-		currPlayers = append(currPlayers, NewPlayer{Name: v.public})
-	}
-
-	gu := gamebox.GameUpdate{
-		Status:      make(map[string]json.RawMessage),
-		NextPlayers: nil,
-		IsGameOver:  false,
-	}
-
-	for _, p := range rps.players {
-		pl, err := json.Marshal(currPlayers)
-		if err != nil {
-			return gu, err
-		}
-		gu.Status[p.secret] = pl
-	}
-	return gu, nil
 }
 
 func (rps *RPSLogic) AddPlayer(secret string, public string) (gamebox.GameUpdate, error) {
@@ -124,20 +92,26 @@ func (rps *RPSLogic) AddPlayer(secret string, public string) (gamebox.GameUpdate
 	rps.players[secret] = p
 
 	// notify players (only the public names will be sent)
-	return rps.updateCurrPlayers()
+	return rps.updateCurrPlayers(public, "")
 }
 
 func (rps *RPSLogic) RemovePlayer(secret string) (gamebox.GameUpdate, error) {
 	// remove player from the internal status
-	_, found := rps.players[secret]
+	p, found := rps.players[secret]
 	if !found {
 		// no players to remove, no updates
 		return gamebox.GameUpdate{}, nil
 	}
 	delete(rps.players, secret)
+	delete(rps.inGamePlayers, secret)
+
+	// TODO: potential deadlock: check if the leaving player was still in game
+	if len(rps.inGamePlayers) == len(rps.moves) {
+		// ... WARNING - deadlock -> call play logic
+	}
 
 	// notify players (only the public names will be sent)
-	return rps.updateCurrPlayers()
+	return rps.updateCurrPlayers("", p.public)
 }
 
 // start() notifies all players they can play.
@@ -148,48 +122,15 @@ func (rps *RPSLogic) Start() (gamebox.GameUpdate, error) {
 		return gu, errors.New("already playing")
 	}
 
-	rps.state = StatusPlay
+	rps.state = StatusPlay // the game don't admit more players
 	rps.currTurn = 0
-	gu.Status = nil
-	gu.NextPlayers = slices.Collect(maps.Keys(rps.players))
+	rps.inGamePlayers = maps.Clone(rps.players) // the original players are in game
+
+	gu.Status = nil // no need to notify a status at start
+	gu.NextPlayers = slices.Collect(maps.Keys(rps.inGamePlayers))
 	gu.IsGameOver = false
 
 	return gu, nil
-}
-
-func getSurvivors(players map[string]choice) []string {
-
-	var rock, paper, scissor bool
-	rockSurv := []string{}
-	paperSurv := []string{}
-	scissorSurv := []string{}
-
-	surv := []string{}
-
-	for k, v := range players {
-		switch v {
-		case Rock:
-			rockSurv = append(rockSurv, k)
-			rock = true
-		case Paper:
-			paperSurv = append(paperSurv, k)
-			paper = true
-		case Scissor:
-			scissorSurv = append(scissorSurv, k)
-			scissor = true
-		}
-	}
-	if !rock {
-		surv = append(surv, scissorSurv...)
-	}
-	if !paper {
-		surv = append(surv, rockSurv...)
-	}
-	if !scissor {
-		surv = append(surv, paperSurv...)
-	}
-
-	return surv
 }
 
 func (rps *RPSLogic) Play(playerId string, move json.RawMessage) (gamebox.GameUpdate, error) {
@@ -198,7 +139,7 @@ func (rps *RPSLogic) Play(playerId string, move json.RawMessage) (gamebox.GameUp
 	}
 
 	// check player
-	_, exist := rps.players[playerId]
+	_, exist := rps.inGamePlayers[playerId]
 	if !exist {
 		return gu, fmt.Errorf("player does not exist [%v]", playerId)
 	}
@@ -206,7 +147,7 @@ func (rps *RPSLogic) Play(playerId string, move json.RawMessage) (gamebox.GameUp
 	// check already moved
 	ch, exist := rps.moves[playerId]
 	if exist {
-		return gu, fmt.Errorf("player [%v] alredy played [%v]", playerId, ch)
+		return gu, fmt.Errorf("player [%v] already played [%v]", playerId, ch)
 	}
 
 	// parse the move
@@ -220,40 +161,126 @@ func (rps *RPSLogic) Play(playerId string, move json.RawMessage) (gamebox.GameUp
 
 	// not all the players have moved yet;
 	// to keep the logic simple there is no notification here now, but
-	// it's possible to notify the players who did the last move and who's left to play
-	if len(rps.moves) < len(rps.players) {
+	// it's possible to notify the players about who did the last move and who's left to play
+	if len(rps.moves) < len(rps.inGamePlayers) {
 		return gu, nil
 	}
 
 	// all the players moved, resolve the turn
-	surv := getSurvivors(rps.moves)
-
-	// if at least one survived, update the status,
-	// otherwise send nothing to redo the turn
-	if len(surv) > 0 {
-		survNames := []string{}
-		for _, k := range surv {
-			survNames = append(survNames, rps.players[k].public)
+	// redo the turn if all players are losers
+	losers := getLosers(rps.moves)
+	if len(losers) < len(rps.inGamePlayers) {
+		for _, p := range losers {
+			delete(rps.inGamePlayers, p)
 		}
-		for _, k := range surv {
-			s := TurnResult{
-				Self:      k,
-				Survivors: survNames,
-			}
-			j, _ := json.Marshal(s)
-			gu.Status[k] = j
-		}
-	}
-
-	gu.NextPlayers = slices.Collect(maps.Keys(rps.moves))
-
-	// only one survivor, we have a winner
-	if len(surv) == 1 {
-		gu.IsGameOver = true
 	}
 
 	// reset the moves
 	rps.moves = make(map[string]choice)
+
+	// send the outcome
+	return rps.updatePlayersTurn()
+}
+
+// --- helpers ---
+
+func getLosers(players map[string]choice) []string {
+
+	var rock, paper, scissor bool
+	rockPlayers := []string{}
+	paperPlayers := []string{}
+	scissorPlayers := []string{}
+
+	losers := []string{}
+
+	for k, v := range players {
+		switch v {
+		case Rock:
+			rockPlayers = append(rockPlayers, k)
+			rock = true
+		case Paper:
+			paperPlayers = append(paperPlayers, k)
+			paper = true
+		case Scissor:
+			scissorPlayers = append(scissorPlayers, k)
+			scissor = true
+		}
+	}
+	if rock {
+		losers = append(losers, scissorPlayers...)
+	}
+	if paper {
+		losers = append(losers, rockPlayers...)
+	}
+	if scissor {
+		losers = append(losers, paperPlayers...)
+	}
+
+	return losers
+}
+
+func (rps *RPSLogic) updateCurrPlayers(joiner, leaver string) (gamebox.GameUpdate, error) {
+	gu := gamebox.GameUpdate{
+		Status:      make(map[string]json.RawMessage),
+		NextPlayers: nil,
+		IsGameOver:  false,
+	}
+
+	m := MsgPlayerPayload{
+		Turn:   TurnResult{},
+		Joiner: joiner,
+		Leaver: leaver,
+	}
+
+	for _, p := range rps.players {
+		pl, err := json.Marshal(m)
+		if err != nil {
+			return gu, err
+		}
+		gu.Status[p.secret] = pl
+	}
+	return gu, nil
+}
+
+func (rps *RPSLogic) updatePlayersTurn() (gamebox.GameUpdate, error) {
+	gu := gamebox.GameUpdate{
+		Status: make(map[string]json.RawMessage),
+	}
+
+	// only the players still in game can play
+	gu.NextPlayers = slices.Collect(maps.Keys(rps.inGamePlayers))
+
+	survivors := []string{}
+	for _, v := range rps.inGamePlayers {
+		survivors = append(survivors, v.public)
+	}
+
+	// all the players get an update
+	// self is the player id if still playing, empty otherwise
+	for _, p := range rps.players {
+
+		self := ""
+		if _, stillPlaying := rps.inGamePlayers[p.secret]; stillPlaying {
+			self = p.secret
+		}
+		t := TurnResult{
+			Self:      self,
+			Survivors: survivors,
+		}
+		m := MsgPlayerPayload{
+			Joiner: "",
+			Leaver: "",
+			Turn:   t,
+		}
+		rawj, err := json.Marshal(m)
+		if err != nil {
+			return gu, err
+		}
+		gu.Status[p.secret] = rawj
+	}
+
+	// only one can win the game
+	gu.IsGameOver = len(rps.inGamePlayers) == 1
 
 	return gu, nil
 }
