@@ -1,6 +1,6 @@
 module tic-tac-toe
 
-go 1.25.1
+go 1.25.7
 
 require github.com/sirupsen/logrus v1.9.4
 
