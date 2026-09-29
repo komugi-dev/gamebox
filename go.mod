@@ -1,6 +1,6 @@
 module github.com/komugi-dev/gamebox
 
-go 1.25.1
+go 1.25.7
 
 require (
 	github.com/beevik/guid v1.0.0

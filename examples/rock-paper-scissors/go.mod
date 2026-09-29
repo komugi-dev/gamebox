@@ -1,11 +1,11 @@
-module tic-tac-toe
+module rock-paper-scissors
 
 go 1.25.7
 
-require github.com/sirupsen/logrus v1.9.4
-
 require (
-	github.com/komugi-dev/gamebox v0.0.0
+	github.com/komugi-dev/gamebox v0.0.1
+	github.com/komugi-dev/gamebox/examples/rock-paper-scissors v0.0.0-00010101000000-000000000000
+	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -20,3 +20,5 @@ require (
 )
 
 replace github.com/komugi-dev/gamebox => ../../
+
+replace github.com/komugi-dev/gamebox/examples/rock-paper-scissors => ../../examples/rock-paper-scissors
