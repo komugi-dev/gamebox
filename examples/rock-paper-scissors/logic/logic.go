@@ -60,7 +60,7 @@ type RPSLogic struct {
 	moves         map[string]choice // turn's moves
 }
 
-func CreateRPSLogic() *RPSLogic {
+func CreateRPSLogic() gamebox.GameRules {
 
 	rps := RPSLogic{
 		state:   StatusLobby,
