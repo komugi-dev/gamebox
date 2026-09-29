@@ -138,10 +138,6 @@ func main() {
 
 	fmt.Println("\n==============================================")
 	fmt.Println("GAME OVER!")
-	if len(winner) > 0 {
-		fmt.Printf("And the winner is: %s\n", winner)
-	} else {
-		fmt.Printf("but it's a draw\n")
-	}
+	fmt.Printf("And the winner is: %s\n", winner)
 	fmt.Println("==============================================")
 }
