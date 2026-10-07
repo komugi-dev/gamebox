@@ -16,7 +16,7 @@ type Table struct {
 	ss      *Session
 }
 
-// Start() starts an existing table, so the game routine can start.
+// Start starts an existing table, so the game routine can start.
 func (t *Table) Start(ctx context.Context) error {
 	s := t.ss
 	url := s.url.JoinPath("tables", t.Summary.TableGUID, "start")

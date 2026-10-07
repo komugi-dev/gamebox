@@ -18,7 +18,7 @@ type client struct {
 	wg         sync.WaitGroup
 }
 
-// writePump() receives messages from outbox and writes them to the network
+// writePump receives messages from outbox and writes them to the network
 func (c *client) writePump(ctx context.Context, outbox <-chan msgPlayer) {
 	defer c.conn.Close()
 
@@ -47,7 +47,7 @@ func (c *client) writePump(ctx context.Context, outbox <-chan msgPlayer) {
 func (c *client) readPump(ctx context.Context, inbox chan<- msgPlayer) {
 	var err error
 
-	// closing the chan so it can unblock the GetMsg() loop
+	// closing the chan so it can unblock the GetMsg loop
 	// chan and socket are recreated in the rejoin
 	defer func() {
 		c.conn.Close()
@@ -83,7 +83,7 @@ func (c *client) readPump(ctx context.Context, inbox chan<- msgPlayer) {
 	log.Infof("readPump exits [%v]", c.playerGUID)
 }
 
-// run() starts the read and write routines to exchange messages between the game engine and the pleayer.
+// run starts the read and write routines to exchange messages between the game engine and the pleayer.
 // inbox receives messages from the player.
 // outbox sends messages to the player.
 // Both chans are managed externally.
@@ -105,7 +105,7 @@ func (c *client) run(ctx context.Context, inbox chan<- msgPlayer, outbox <-chan 
 	}()
 }
 
-// dispose() blocks until the routines controlled by the client have been terminated.
+// dispose blocks until the routines controlled by the client have been terminated.
 func (c *client) dispose() {
 	if c.cancel != nil {
 		c.cancel()
