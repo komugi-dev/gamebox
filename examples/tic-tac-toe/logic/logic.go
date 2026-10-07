@@ -108,7 +108,7 @@ func (t *T3Logic) move(playerIdx int, move int) error {
 	return nil
 }
 
-// is GameOver() checks if a game can continue; it returns the winner in case it's done
+// is GameOver checks if a game can continue; it returns the winner in case it's done
 func (t *T3Logic) isGameOver() (gameOver bool, winnerSecret string, winnerId int) {
 
 	// check winner
@@ -165,7 +165,7 @@ func (t *T3Logic) AddPlayer(playerId string, playerName string) (gamebox.GameUpd
 	return gu, nil
 }
 
-// when a player abandons the game, it just ends
+// RemovePlayer ends the game when a player abandons the table
 func (t *T3Logic) RemovePlayer(secret string) (gamebox.GameUpdate, error) {
 	log.Warningf("player %v quit the game; dropping the table", secret)
 

@@ -1,0 +1,84 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.25' ] 
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Check formatting
+      run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then echo "Code is not formatted. Run 'gofmt -s -w .'"; exit 1; fi
+
+    - name: Vet
+      run: go vet ./...
+
+    - name: Test
+      run: |
+        # gamebox
+        go test -v -race -coverprofile=cov_gamebox.out ./...
+        go tool cover -func=cov_gamebox.out
+
+        # rock-paper-scissor
+        cd examples/rock-paper-scissors
+        go test -v -race -coverprofile=cov_rps.out ./...
+        go tool cover -func=cov_rps.out
+        cd ../..
+
+        # tic-tac-toe
+        cd examples/tic-tac-toe
+        go test -v -race -coverprofile=cov_ttt.out ./...
+        go tool cover -func=cov_ttt.out
+
+    - name: Build root module
+      run: go build ./...
+
+    - name: Build rock-paper-scissors
+      run: |
+        cd examples/rock-paper-scissors
+        go build -o rps-bin ./cmd/
+        ./rps-bin
+
+    - name: Build tic-tac-toe
+      run: |
+        cd examples/tic-tac-toe
+        go build -o ttt-cli ./cmd/client/
+        go build -o ttt-srv ./cmd/server/
+
+        # start server
+        ./ttt-srv > srv.log 2>&1 &
+        sleep 1
+
+        # start bot
+        ./ttt-cli -bot > bot1.log 2>&1 &
+
+        # start GUI bot
+        timeout 10s ./ttt-cli -bot
+
+        echo "=== LOG SERVER ==="
+        cat srv.log
+
+        echo "=== LOG CLIENT ==="
+        cat bot1.log
+
+        # stop apps
+        killall ttt-srv || true
+        killall ttt-clie || true

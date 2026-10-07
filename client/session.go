@@ -16,7 +16,7 @@ type Session struct {
 
 type TablesResp []TableSummary
 
-// CreateSession() creates a new game session.
+// CreateSession creates a new game session.
 // A session allows to create a new table get a list of existing tables.
 // Create a session first, then a table and a player.
 func CreateSession(cli *http.Client, gameboxURL url.URL) *Session {
@@ -29,7 +29,7 @@ func CreateSession(cli *http.Client, gameboxURL url.URL) *Session {
 	}
 }
 
-// Table() creates a table with the given name.
+// Table creates a table with the given name.
 // It returns the table id on success.
 func (s *Session) Table(ctx context.Context, name string) (Table, error) {
 
@@ -63,7 +63,7 @@ func (s *Session) Table(ctx context.Context, name string) (Table, error) {
 	return Table{Summary: ts, ss: s}, nil
 }
 
-// Tables() returns a list of tables.
+// Tables returns a list of tables.
 func (s *Session) Tables(ctx context.Context) ([]Table, error) {
 	url := s.url.JoinPath("tables")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)

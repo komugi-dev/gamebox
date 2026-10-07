@@ -14,12 +14,12 @@ import (
 const maxPlayerNameLen = 1024
 
 // group the handlers
-type API struct {
+type serverAPI struct {
 	registry *gameRegistry
 }
 
-func newAPI(registry *gameRegistry) *API {
-	return &API{
+func newAPI(registry *gameRegistry) *serverAPI {
+	return &serverAPI{
 		registry: registry,
 	}
 }
@@ -32,7 +32,7 @@ type createTableResponse struct {
 	TableGUID string `json:"table_guid"`
 }
 
-func (api *API) createTableHandler() http.HandlerFunc {
+func (api *serverAPI) createTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		// parse the request
@@ -52,7 +52,7 @@ func (api *API) createTableHandler() http.HandlerFunc {
 	}
 }
 
-func (api *API) listTableHandler() http.HandlerFunc {
+func (api *serverAPI) listTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resp := api.registry.listTables()
 
@@ -70,7 +70,7 @@ type joinTableResponse struct {
 	WebsocketSecret string `json:"websocket_secret"`
 }
 
-func (api *API) joinTableHandler() http.HandlerFunc {
+func (api *serverAPI) joinTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// get the table_guid
 		vars := mux.Vars(r)
@@ -114,7 +114,7 @@ type rejoinTableResponse struct {
 	WebsocketSecret string `json:"websocket_secret"`
 }
 
-func (api *API) rejoinTableHandler() http.HandlerFunc {
+func (api *serverAPI) rejoinTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// get the table_guid
 		vars := mux.Vars(r)
@@ -149,7 +149,7 @@ type quitTableRequest struct {
 	PlayerGUID string `json:"player_guid"`
 }
 
-func (api *API) quitTableHandler() http.HandlerFunc {
+func (api *serverAPI) quitTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// get the table_guid
 		vars := mux.Vars(r)
@@ -174,7 +174,7 @@ func (api *API) quitTableHandler() http.HandlerFunc {
 	}
 }
 
-func (api *API) listPlayersHandler() http.HandlerFunc {
+func (api *serverAPI) listPlayersHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// get the table_guid
 		vars := mux.Vars(r)
@@ -193,7 +193,7 @@ func (api *API) listPlayersHandler() http.HandlerFunc {
 	}
 }
 
-func (api *API) startTableHandler() http.HandlerFunc {
+func (api *serverAPI) startTableHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// get the table_guid
 		vars := mux.Vars(r)
@@ -216,7 +216,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-func (api *API) wsUpgradeHandler() http.HandlerFunc {
+func (api *serverAPI) wsUpgradeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secret := r.URL.Query().Get("secret")
 		ticket, err := api.registry.consumeTicket(secret)

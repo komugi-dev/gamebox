@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	TableNotFound  = "table [%v] not found"
-	PlayerNotFound = "player [%v] not found"
-	TicketNotFound = "ticket [%v] not found"
-	StartError     = "game start error; table guid: %v; err: %v"
+	tableNotFound  = "table [%v] not found"
+	playerNotFound = "player [%v] not found"
+	ticketNotFound = "ticket [%v] not found"
+	startError     = "game start error; table guid: %v; err: %v"
 )
 
 const ticketCleanUpAfter = 30 * time.Second
@@ -93,7 +93,7 @@ func (g *gameRegistry) joinTable(tableGUID string, playerName string) (wsSecret 
 	_, ok := g.registry[tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return "", fmt.Errorf(TableNotFound, tableGUID)
+		return "", fmt.Errorf(tableNotFound, tableGUID)
 	}
 
 	p := player{
@@ -124,12 +124,12 @@ func (g *gameRegistry) rejoinTable(tableGUID string, playerGUID string) (wsSecre
 	t, ok := g.registry[tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return "", fmt.Errorf(TableNotFound, tableGUID)
+		return "", fmt.Errorf(tableNotFound, tableGUID)
 	}
 
 	p := t.getPlayer(playerGUID)
 	if p == nil {
-		return "", fmt.Errorf(PlayerNotFound, playerGUID)
+		return "", fmt.Errorf(playerNotFound, playerGUID)
 	}
 
 	log.Infof("player %+v rejoining game %v", p, tableGUID)
@@ -156,7 +156,7 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 
 	t, ok := g.pendingTickets[secret]
 	if !ok {
-		return joinTicket{}, fmt.Errorf(TicketNotFound, secret)
+		return joinTicket{}, fmt.Errorf(ticketNotFound, secret)
 	}
 
 	// remove the ticket nevertheless
@@ -165,7 +165,7 @@ func (g *gameRegistry) consumeTicket(secret string) (joinTicket, error) {
 	// check the table exists
 	_, ok = g.registry[t.tableGUID]
 	if !ok {
-		return joinTicket{}, fmt.Errorf(TableNotFound, t.tableGUID)
+		return joinTicket{}, fmt.Errorf(tableNotFound, t.tableGUID)
 	}
 
 	return t, nil
@@ -178,7 +178,7 @@ func (g *gameRegistry) seatPlayer(p player, c *client) (tableInbox chan<- msgPla
 	table, ok := g.registry[p.tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		err = fmt.Errorf(TableNotFound, p.tableGUID)
+		err = fmt.Errorf(tableNotFound, p.tableGUID)
 		return nil, nil, err
 	}
 	tableInbox = table.inbox
@@ -214,12 +214,12 @@ func (g *gameRegistry) quitTable(p player) error {
 	t, ok := g.registry[p.tableGUID]
 	g.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf(TableNotFound, p.tableGUID)
+		return fmt.Errorf(tableNotFound, p.tableGUID)
 	}
 
 	player := t.getPlayer(p.guid)
 	if player == nil {
-		return fmt.Errorf(PlayerNotFound, p.guid)
+		return fmt.Errorf(playerNotFound, p.guid)
 	}
 
 	// delete wsocket, readPump and writePump
@@ -264,7 +264,7 @@ func (g *gameRegistry) listPlayers(tableGUID string) ([]string, error) {
 
 	t, ok := g.registry[tableGUID]
 	if !ok {
-		return ret, fmt.Errorf(TableNotFound, tableGUID)
+		return ret, fmt.Errorf(tableNotFound, tableGUID)
 	}
 
 	for _, p := range t.getPlayers() {
@@ -281,7 +281,7 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 	g.mu.RUnlock()
 	if !ok {
 		log.Errorf("table %v not fonud; aborting", tableGUID)
-		return fmt.Errorf(TableNotFound, tableGUID)
+		return fmt.Errorf(tableNotFound, tableGUID)
 	}
 
 	log.Infof("startTable: Table %s starting...", t.summary.TableGUID)
@@ -305,7 +305,7 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 	return nil
 }
 
-// cleanUpTicketAfter() deletes a ticket after a timeout to prevent proliferation of unused tickets
+// cleanUpTicketAfter deletes a ticket after a timeout to prevent proliferation of unused tickets
 func (g *gameRegistry) cleanUpTicketAfter(secret string, timeout time.Duration) {
 	time.AfterFunc(timeout, func() {
 		g.mu.Lock()

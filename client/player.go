@@ -46,7 +46,7 @@ type msgPlayer struct {
 	Payload    json.RawMessage `json:"payload"`
 }
 
-// CreatePlayer() creates a new player that interacts with the game.
+// CreatePlayer creates a new player that interacts with the game.
 func CreatePlayer(name string, s *Session) *Player {
 	return &Player{
 		Name: name,
@@ -199,7 +199,7 @@ func (p *Player) wsConn(ctx context.Context, secret string) error {
 
 }
 
-// Join() - The player joins a table and instantiate the web socket.
+// Join: The player joins a table and instantiate the web socket.
 // Note: Join, Rejoin and Quit are not thread-safe.
 // Do not call them from different go routines in the same instance of PLayer.
 func (p *Player) Join(ctx context.Context, t Table) error {
@@ -214,7 +214,7 @@ func (p *Player) Join(ctx context.Context, t Table) error {
 	return nil
 }
 
-// Rejoin() - The player rejoins a table.
+// Rejoin: The player rejoins a table.
 // Note: Join, Rejoin and Quit are not thread-safe.
 // Do not call them from different go routines in the same instance of PLayer.
 func (p *Player) Rejoin(ctx context.Context) error {
@@ -233,7 +233,7 @@ type quitTableRequest struct {
 	PlayerGUID string `json:"player_guid"`
 }
 
-// Quit() - The player quits the table.
+// Quit: The player quits the table.
 // Note: Join, Rejoin and Quit are not thread-safe.
 // Do not call them from different go routines in the same instance of PLayer.
 func (p *Player) Quit(ctx context.Context) error {
@@ -268,8 +268,8 @@ func (p *Player) Quit(ctx context.Context) error {
 	return nil
 }
 
-// GetMsg() get messages from the gamebox service.
-// The function blocs until a message is received or when the context is canceled.
+// GetMsg get messages from the gamebox service.
+// The function blocks until a message is received or when the context is canceled.
 func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, []string, error) {
 
 	if p.inbox == nil {
@@ -291,7 +291,7 @@ func (p *Player) GetMsg(ctx context.Context) (MsgType, json.RawMessage, []string
 	}
 }
 
-// SendMsg() sends messages to the gamebox service.
+// SendMsg sends messages to the gamebox service.
 func (p *Player) SendMsg(ctx context.Context, msg json.RawMessage) error {
 
 	if p.inbox == nil {

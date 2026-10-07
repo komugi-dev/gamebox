@@ -120,7 +120,7 @@ func randomBotMove(board []int) int {
 	return move
 }
 
-// setupGame() instantiates a new tic-tac-toe player
+// setupGame instantiates a new tic-tac-toe player
 func setupGame(ctx context.Context, gameboxURL string, playerName string) (*client.Player, error) {
 
 	// setup player
@@ -147,8 +147,7 @@ func setupGame(ctx context.Context, gameboxURL string, playerName string) (*clie
 	return pl, nil
 }
 
-// the default is human player.
-// "-bot" flag runs in auto mode.
+// main starts the client; the default is human player, "-bot" flag runs in auto mode
 func main() {
 	log.SetLevel(log.ErrorLevel)
 

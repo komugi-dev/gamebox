@@ -6,7 +6,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func registerAPIRoutes(r *mux.Router, api *API) {
+func registerAPIRoutes(r *mux.Router, api *serverAPI) {
 
 	r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
