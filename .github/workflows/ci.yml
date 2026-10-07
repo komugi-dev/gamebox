@@ -37,7 +37,7 @@ jobs:
         go test -v -race -coverprofile=cov_gamebox.out ./...
 
         # rock-paper-scissor
-        cd examples/rock-paper-scissor
+        cd examples/rock-paper-scissors
         go test -v -race -coverprofile=cov_rps.out ./...
         cd ../..
 
@@ -55,7 +55,7 @@ jobs:
 
     - name: Build rock-paper-scissors
       run: |
-        cd examples/rock-paper-scissor
+        cd examples/rock-paper-scissors
         go build -r rps-bin
         ./rps-bin
 
