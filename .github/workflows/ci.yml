@@ -64,14 +64,21 @@ jobs:
         go build -o ttt-srv ./cmd/server/
 
         # start server
-        ./ttt-srv > /dev/null 2>&1 &
+        ./ttt-srv > srv.log 2>&1 &
         sleep 1
 
-        # start silent bot
-        ./ttt-cli -bot > /dev/null 2>&1 &
+        # start bot
+        ./ttt-cli -bot > bot1.log 2>&1 &
 
         # start GUI bot
-        ./ttt-cli -bot
+        timeout 10s ./ttt-cli -bot
 
-        # stop the server
-        killall ttt-srv
+        echo "=== LOG SERVER ==="
+        cat srv.log
+
+        echo "=== LOG CLIENT ==="
+        cat bot1.log
+
+        # stop apps
+        killall ttt-srv || true
+        killall ttt-clie || true
