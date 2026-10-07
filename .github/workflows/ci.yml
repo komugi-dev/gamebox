@@ -54,7 +54,7 @@ jobs:
     - name: Build rock-paper-scissors
       run: |
         cd examples/rock-paper-scissors
-        go build -r rps-bin
+        go build -o rps-bin ./cmd/
         ./rps-bin
 
     - name: Build tic-tac-toe
