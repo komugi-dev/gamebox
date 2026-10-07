@@ -35,19 +35,17 @@ jobs:
       run: |
         # gamebox
         go test -v -race -coverprofile=cov_gamebox.out ./...
+        go tool cover -func=cov_gamebox.out
 
         # rock-paper-scissor
         cd examples/rock-paper-scissors
         go test -v -race -coverprofile=cov_rps.out ./...
+        go tool cover -func=cov_rps.out
         cd ../..
 
         # tic-tac-toe
         cd examples/tic-tac-toe
         go test -v -race -coverprofile=cov_ttt.out ./...
-
-        # results
-        go tool cover -func=cov_gamebox.out
-        go tool cover -func=cov_rps.out
         go tool cover -func=cov_ttt.out
 
     - name: Build root module
