@@ -123,7 +123,7 @@ func (rps *RPSLogic) RemovePlayer(secret string) (gamebox.GameUpdate, error) {
 	return rps.buildGameUpdate(basePayload, isComplete)
 }
 
-// start() notifies all players they can play.
+// Start notifies all players they can play.
 // It cannot be called twice
 func (rps *RPSLogic) Start() (gamebox.GameUpdate, error) {
 	gu := gamebox.GameUpdate{}
@@ -221,12 +221,12 @@ func getLosers(players map[string]choice) []string {
 	return losers
 }
 
-// isTurnComplete() evaluates if the turn can be resolved
+// isTurnComplete evaluates if the turn can be resolved
 func (rps *RPSLogic) isTurnComplete() bool {
 	return rps.state == StatusPlay && len(rps.moves) >= len(rps.inGamePlayers)
 }
 
-// resolveTurn() resolves a turn.
+// resolveTurn resolves a turn.
 // Call it when all the players played.
 // Return turn draw
 func (rps *RPSLogic) resolveTurn() {
@@ -242,7 +242,7 @@ func (rps *RPSLogic) resolveTurn() {
 	rps.currTurn++
 }
 
-// buildGameUpdate() returns a GameUpdate struct based on the game status
+// buildGameUpdate returns a GameUpdate struct based on the game status
 func (rps *RPSLogic) buildGameUpdate(basePayload MsgPlayerPayload, turnResolved bool) (gamebox.GameUpdate, error) {
 	gu := gamebox.GameUpdate{
 		Status: make(map[string]json.RawMessage),

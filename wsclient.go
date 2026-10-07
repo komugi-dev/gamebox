@@ -77,7 +77,7 @@ func (c *client) readPump(inbox chan<- msgPlayer) error {
 	return err
 }
 
-// run() starts the read and write routines to exchange messages between the game engine and the pleayer.
+// run starts the read and write routines to exchange messages between the game engine and the pleayer.
 // inbox receives messages from the player.
 // outbox sends messages to the player.
 // Both chans are managed externally.

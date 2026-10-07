@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 )
 
 const GameboxPort = 8182
+const MaxTurns = 1000
 
 func main() {
 	log.SetLevel(log.ErrorLevel)
@@ -76,10 +78,12 @@ func main() {
 	}
 
 	// start bots
-	for _, p := range players {
+	for idx, p := range players {
 		go func(bot *client.Player) {
 			turn := 1
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			seed := time.Now().UnixNano() + int64(idx) // force seed diversity
+			fmt.Printf("using seed: %v\n", seed)
+			rnd := rand.New(rand.NewSource(seed))
 
 			for {
 				msgType, payload, _, err := bot.GetMsg(ctx)
@@ -102,6 +106,11 @@ func main() {
 						log.Printf("error sending moves for %s: %v", bot.Name, err)
 					}
 					turn++
+
+					if turn > MaxTurns {
+						fmt.Printf("turns reached the max (%v), force exit", MaxTurns)
+						os.Exit(1)
+					}
 
 				case client.MsgTypeGameOver:
 

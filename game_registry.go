@@ -305,7 +305,7 @@ func (g *gameRegistry) startTable(tableGUID string) error {
 	return nil
 }
 
-// cleanUpTicketAfter() deletes a ticket after a timeout to prevent proliferation of unused tickets
+// cleanUpTicketAfter deletes a ticket after a timeout to prevent proliferation of unused tickets
 func (g *gameRegistry) cleanUpTicketAfter(secret string, timeout time.Duration) {
 	time.AfterFunc(timeout, func() {
 		g.mu.Lock()

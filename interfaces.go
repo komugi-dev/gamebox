@@ -9,7 +9,7 @@ type EngineMeta struct {
 	Desc       string          `json:"description"`
 	MinPlayers int             `json:"min_players"`
 	MaxPlayers int             `json:"max_players"`
-	Extended   json.RawMessage `json:"extended,omitempty"`
+	Extended   json.RawMessage `json:"extended,omitempty"` // additional information the game logic may share
 }
 
 // InstanceStatus represents the dynamic state of the table.
@@ -28,31 +28,31 @@ type GameUpdate struct {
 
 // GameRules is the interface that a game engine must implement to be hosted by GameBox.
 type GameRules interface {
-	// Info() returns information about the game.
+	// Info returns information about the game.
 	// Values and meanings of the fields are responsibility of the game creator.
 	Info() InstanceStatus
 
-	// AddPlayer() registers a player in the engine's internal state.
+	// AddPlayer registers a player in the engine's internal state.
 	// - secret is the secret identifier created by the service
 	// - public contains public data about the player
 	// Developers can use the public string at their own convenience.
 	// If the game allows late-joins, it should return the updated state.
 	AddPlayer(secret string, public string) (GameUpdate, error)
 
-	// RemovePlayer() deletes from the game a player who explicitly quits the table.
+	// RemovePlayer deletes from the game a player who explicitly quits the table.
 	// The game logic decides how to handle this event, e.g.:
 	// - continuing the game
 	// - putting the game in stand-by and waiting for a new player to join
 	// - declaring GameOver and assigning the victory to other player(s)
 	RemovePlayer(secret string) (GameUpdate, error)
 
-	// Start() initializes the game.
+	// Start initializes the game.
 	// It returns the initial state views for the players and the list of players
 	// who are expected to make the first move.
 	// The specific error returned depends on the game engine implementation.
 	Start() (GameUpdate, error)
 
-	// Play() processes a move from a specific player.
+	// Play processes a move from a specific player.
 	// It returns a map with the updated state view for each player, natively supporting hidden information.
 	// GameBox will:
 	// - broadcast the updated state only to the players present as keys in the updatedStatus map.

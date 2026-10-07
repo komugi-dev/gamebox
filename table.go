@@ -227,7 +227,7 @@ func (t *table) updatePlayers(updatedStatus map[string]json.RawMessage, nextPlay
 	}
 }
 
-// setPlayer() checks if the player is rejoining, then creates a channel to handle outgoing messages
+// setPlayer checks if the player is rejoining, then creates a channel to handle outgoing messages
 // clientToClose is not nil, close it
 func (t *table) setPlayer(p player, c *client) (playerOutbox <-chan msgPlayer) {
 	t.mu.Lock()
