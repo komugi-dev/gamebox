@@ -2,7 +2,7 @@ package gamebox
 
 import "encoding/json"
 
-// EngineMeta contains immutable static data of the game.
+// An EngineMeta contains immutable static data of the game.
 type EngineMeta struct {
 	Name       string          `json:"name"`
 	Version    string          `json:"version"`
@@ -12,14 +12,14 @@ type EngineMeta struct {
 	Extended   json.RawMessage `json:"extended,omitempty"` // additional information the game logic may share
 }
 
-// InstanceStatus represents the dynamic state of the table.
+// An InstanceStatus represents the dynamic state of the table.
 type InstanceStatus struct {
 	State    string          `json:"state"`              // e.g. "lobby", "playing", "done"
 	Players  int             `json:"players"`            // the current players
 	Extended json.RawMessage `json:"extended,omitempty"` // extended info
 }
 
-// GameUpdate groups the fields returned by the interface functions.
+// A GameUpdate groups the fields returned by the interface functions.
 type GameUpdate struct {
 	Status      map[string]json.RawMessage
 	NextPlayers []string

@@ -12,9 +12,6 @@ type client struct {
 	playerGUID string
 }
 
-type ClientMsg struct {
-}
-
 func newClient(wsConn *websocket.Conn, playerGUID string) *client {
 	return &client{
 		conn:       wsConn,
