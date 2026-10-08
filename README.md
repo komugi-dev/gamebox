@@ -11,3 +11,10 @@ Robust Concurrency & Clean Architecture: The underlying skeleton securely handle
 Language-Agnostic Protocol: The network layer is entirely decoupled from the game logic. By relying on standard WebSockets and a clean JSON message flow, the engine is agnostic to the client. AI agents can be written in Python, Rust, or Node.js and seamlessly connect to this Go server.
 
 Modern Tooling: Developed adopting an AI-assisted workflow, utilizing AI as a pair-programmer and architectural sounding board to iterate on design choices.
+
+## Examples
+
+This repository contains fully functional multiplayer games built with `gamebox` as independent modules:
+
+* [Rock-Paper-Scissors](./examples/rock-paper-scissors): A simple turn-based game demonstrating basic state synchronization.
+* [Tic-Tac-Toe](./examples/tic-tac-toe): A classic grid game with bot integration.
